@@ -17,7 +17,10 @@ get through police checkpoints before the route timer expires.
 
 The current version is a playable prototype built for the Unity Editor and
 WebGL. Its world and gameplay objects are assembled at runtime from lightweight
-3D primitives, making the project quick to build and easy to iterate on.
+3D primitives, making the project quick to build and easy to iterate on. The
+driving model uses momentum, speed-sensitive lateral grip, braking weight
+transfer, and visual body roll to make the short bus feel heavy while preserving
+the game's accessible three-lane structure.
 
 ## Gameplay
 
@@ -29,9 +32,11 @@ possible before time runs out.
 - Carry up to 12 passengers at a time.
 - Earn score and fare money from pickups and roadside bonuses.
 - Avoid traffic collisions, which cost score and time.
-- Stop for red lights or receive a time penalty.
+- Stop for red lights or receive a time penalty; crossing on green adds 10 seconds.
 - Pay `$10` at police checkpoints to continue immediately, or wait for release.
 - Complete a lap to earn bonus score and 12 additional seconds.
+- Manage the Calafia's heavy momentum: fast swerves overshoot, hard braking
+  shifts its weight forward, and high-speed lane changes can become drifts.
 - Bank each run's final score as persistent Garage Points.
 - Spend Garage Points on new Calafia color schemes and equip owned skins.
 
