@@ -32,6 +32,24 @@ possible before time runs out.
 - Stop for red lights or receive a time penalty.
 - Pay `$10` at police checkpoints to continue immediately, or wait for release.
 - Complete a lap to earn bonus score and 12 additional seconds.
+- Bank each run's final score as persistent Garage Points.
+- Spend Garage Points on new Calafia color schemes and equip owned skins.
+
+## Calafia Garage
+
+The title screen includes a persistent garage with five color schemes:
+
+| Skin | Price |
+| --- | ---: |
+| Classic Azul | Free |
+| Sunset Coral | 500 Garage Points |
+| Neon Ruta | 1,200 Garage Points |
+| Baja Gold | 2,500 Garage Points |
+| Midnight TJ | 4,000 Garage Points |
+
+Your Garage Points, purchased skins, and selected skin are saved locally with
+Unity `PlayerPrefs`. In WebGL builds, this data is stored in the browser profile.
+Clearing site data or using a different browser profile resets local progress.
 
 ## Controls
 
@@ -47,7 +65,7 @@ possible before time runs out.
 ## Technology
 
 - **Unity 2022.3.62f3 LTS** for the game engine and editor.
-- **C#** for gameplay, world generation, input, scoring, and UI.
+- **C#** for gameplay, world generation, input, scoring, persistence, and UI.
 - **Unity WebGL / WebAssembly** for browser builds.
 - **Unity Addressables 1.22.3** for the original asset-loading experiment and
   future downloadable content support.
@@ -139,10 +157,12 @@ The prototype has been validated with the following workflow:
   - the Unity data file
 - Manual browser playtesting of startup, controls, pickups, obstacles, HUD,
   scoring, checkpoints, laps, and game-over flow.
+- Unity compilation and WebGL build validation for garage purchases, persistent
+  ownership, saved skin selection, and runtime color application.
 
 There are currently no automated gameplay tests. Future work should add Unity
 Test Framework coverage for scoring, lane bounds, pickup rules, time penalties,
-and checkpoint payments.
+checkpoint payments, garage purchases, and saved skin selection.
 
 ## Project Structure
 
