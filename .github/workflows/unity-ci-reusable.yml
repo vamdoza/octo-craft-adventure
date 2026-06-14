@@ -1,0 +1,158 @@
+# Reusable Unity CI workflow for game-ci WebGL builds.
+#
+# Repository secrets (Settings > Secrets and variables > Actions):
+#   UNITY_LICENSE   - Unity personal license file contents
+#   UNITY_EMAIL     - Unity account email
+#   UNITY_PASSWORD  - Unity account password (alphanumeric recommended)
+#   WEBGL_DEPLOY_TOKEN - PAT with push access to oct-craft-adventure-webgl
+#   UGS_CLI_SERVICE_KEY_ID     - Unity service account key ID (CCD upload)
+#   UGS_CLI_SERVICE_SECRET_KEY - Unity service account secret key (CCD upload)
+#
+# Repository variables:
+#   UGS_CLI_ENVIRONMENT_NAME - CCD environment (e.g. development)
+#   UGS_CLI_BUCKET_NAME      - CCD bucket name for Addressables remote content
+
+name: Unity Build CI (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      build_webgl:
+        description: Build the WebGL player and deploy to the GitHub Pages repo
+        type: boolean
+        required: true
+      build_addressables:
+        description: Build Addressables content and upload to Unity CCD
+        type: boolean
+        required: true
+    secrets:
+      UNITY_LICENSE:
+        required: true
+      UNITY_EMAIL:
+        required: true
+      UNITY_PASSWORD:
+        required: true
+      WEBGL_DEPLOY_TOKEN:
+        required: false
+      UGS_CLI_SERVICE_KEY_ID:
+        required: false
+      UGS_CLI_SERVICE_SECRET_KEY:
+        required: false
+
+env:
+  UNITY_VERSION: 2022.3.62f3
+  TARGET_PLATFORM: WebGL
+  UGS_CLI_PROJECT_ID: 2c6104ea-92b8-4a98-a51f-61ac67af113c
+  WEBGL_DEPLOY_USER: vamdoza
+  WEBGL_DEPLOY_REPO: oct-craft-adventure-webgl
+  WEBGL_DEPLOY_EMAIL: 41898282+vamdoza@users.noreply.github.com
+
+jobs:
+  build:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-WebGL-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-WebGL-
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+
+      - name: Build WebGL player
+        if: inputs.build_webgl && !inputs.build_addressables
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: ${{ env.TARGET_PLATFORM }}
+          buildName: WebGL
+          buildsPath: build
+
+      - name: Build Addressables only
+        if: inputs.build_addressables && !inputs.build_webgl
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: ${{ env.TARGET_PLATFORM }}
+          buildMethod: UnityBuilderAction.BuildScript.BuildAddressablesOnly
+          buildName: WebGL
+          buildsPath: build
+
+      - name: Build WebGL player with Addressables
+        if: inputs.build_webgl && inputs.build_addressables
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: ${{ env.TARGET_PLATFORM }}
+          buildMethod: UnityBuilderAction.BuildScript.BuildWithAddressables
+          buildName: WebGL
+          buildsPath: build
+
+      - name: Deploy WebGL build to GitHub Pages repo
+        if: inputs.build_webgl
+        env:
+          GITHUB_TOKEN: ${{ secrets.WEBGL_DEPLOY_TOKEN }}
+          GITHUB_USER: ${{ env.WEBGL_DEPLOY_USER }}
+          GITHUB_REPO: ${{ env.WEBGL_DEPLOY_REPO }}
+          GITHUB_EMAIL: ${{ env.WEBGL_DEPLOY_EMAIL }}
+          OUTPUT_DIRECTORY: build/WebGL
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          DEPLOY_COMMIT_MESSAGE: GitHub Actions WebGL build ${{ github.run_number }}
+        run: bash PostBuildScripts/deploy-ghpages.sh
+
+      - name: Upload Addressables to Unity CCD
+        if: inputs.build_addressables
+        env:
+          UGS_CLI_SERVICE_KEY_ID: ${{ secrets.UGS_CLI_SERVICE_KEY_ID }}
+          UGS_CLI_SERVICE_SECRET_KEY: ${{ secrets.UGS_CLI_SERVICE_SECRET_KEY }}
+          UGS_CLI_PROJECT_ID: ${{ env.UGS_CLI_PROJECT_ID }}
+          UGS_CLI_ENVIRONMENT_NAME: ${{ vars.UGS_CLI_ENVIRONMENT_NAME }}
+          UGS_CLI_BUCKET_NAME: ${{ vars.UGS_CLI_BUCKET_NAME }}
+          ADDRESSABLES_PATH: ServerData/WebGL
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: bash PostBuildScripts/upload-addressables-ccd.sh
+
+      - name: Upload WebGL build artifact
+        if: inputs.build_webgl
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebGL-build
+          path: build/WebGL
+          if-no-files-found: error
+
+      - name: Upload Addressables build artifact
+        if: inputs.build_addressables
+        uses: actions/upload-artifact@v4
+        with:
+          name: Addressables-WebGL
+          path: ServerData/WebGL
+          if-no-files-found: error

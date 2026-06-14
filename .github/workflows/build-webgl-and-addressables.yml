@@ -1,0 +1,20 @@
+name: Build WebGL and Addressables
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Assets/**'
+  workflow_dispatch:
+
+concurrency:
+  group: build-webgl-addressables-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build-webgl-and-addressables:
+    uses: ./.github/workflows/unity-ci-reusable.yml
+    secrets: inherit
+    with:
+      build_webgl: true
+      build_addressables: true

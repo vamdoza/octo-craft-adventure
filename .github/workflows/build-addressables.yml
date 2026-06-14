@@ -1,0 +1,20 @@
+name: Build Addressables
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Assets/**'
+  workflow_dispatch:
+
+concurrency:
+  group: build-addressables-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build-addressables:
+    uses: ./.github/workflows/unity-ci-reusable.yml
+    secrets: inherit
+    with:
+      build_webgl: false
+      build_addressables: true

@@ -1,0 +1,20 @@
+name: Build WebGL
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Assets/**'
+  workflow_dispatch:
+
+concurrency:
+  group: build-webgl-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build-webgl:
+    uses: ./.github/workflows/unity-ci-reusable.yml
+    secrets: inherit
+    with:
+      build_webgl: true
+      build_addressables: false

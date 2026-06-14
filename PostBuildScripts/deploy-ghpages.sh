@@ -22,7 +22,8 @@ for name in GITHUB_TOKEN GITHUB_USER GITHUB_REPO GITHUB_EMAIL; do
 done
 
 GIT_AUTHOR_NAME="${USER:-${USERNAME:-unity-cloud-build}}"
-BUILD_NUMBER="${UCB_BUILD_NUMBER:-unknown}"
+BUILD_NUMBER="${UCB_BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-unknown}}"
+COMMIT_MESSAGE="${DEPLOY_COMMIT_MESSAGE:-CI build ${BUILD_NUMBER}}"
 
 resolve_build_folder() {
   if [ -n "${UNITY_PLAYER_PATH:-}" ]; then
@@ -73,7 +74,7 @@ if git diff --cached --quiet; then
   exit 0
 fi
 
-git commit -m "unity cloud build ${BUILD_NUMBER}"
+git commit -m "${COMMIT_MESSAGE}"
 git log -1
 git push --force
 
