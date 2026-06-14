@@ -5,10 +5,14 @@ on:
     branches: [main]
     paths:
       - 'Assets/**'
+  push:
+    branches: [main]
+    paths:
+      - 'Assets/**'
   workflow_dispatch:
 
 concurrency:
-  group: build-webgl-${{ github.event.pull_request.number || github.run_id }}
+  group: build-webgl-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -18,3 +22,5 @@ jobs:
     with:
       build_webgl: true
       build_addressables: false
+      deploy_webgl: ${{ github.event_name != 'pull_request' }}
+      upload_addressables: false

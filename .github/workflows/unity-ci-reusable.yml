@@ -18,13 +18,21 @@ on:
   workflow_call:
     inputs:
       build_webgl:
-        description: Build the WebGL player and deploy to the GitHub Pages repo
+        description: Build the WebGL player
         type: boolean
         required: true
       build_addressables:
-        description: Build Addressables content and upload to Unity CCD
+        description: Build Addressables content
         type: boolean
         required: true
+      deploy_webgl:
+        description: Deploy WebGL output to the GitHub Pages repo (main/manual only)
+        type: boolean
+        default: false
+      upload_addressables:
+        description: Upload Addressables to Unity CCD and create a release (main/manual only)
+        type: boolean
+        default: false
     secrets:
       UNITY_LICENSE:
         required: true
@@ -49,7 +57,7 @@ env:
 
 jobs:
   build:
-    name: Build and deploy
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -116,31 +124,6 @@ jobs:
           buildName: WebGL
           buildsPath: build
 
-      - name: Deploy WebGL build to GitHub Pages repo
-        if: inputs.build_webgl
-        env:
-          GITHUB_TOKEN: ${{ secrets.WEBGL_DEPLOY_TOKEN }}
-          GITHUB_USER: ${{ env.WEBGL_DEPLOY_USER }}
-          GITHUB_REPO: ${{ env.WEBGL_DEPLOY_REPO }}
-          GITHUB_EMAIL: ${{ env.WEBGL_DEPLOY_EMAIL }}
-          OUTPUT_DIRECTORY: build/WebGL
-          GITHUB_RUN_NUMBER: ${{ github.run_number }}
-          DEPLOY_COMMIT_MESSAGE: GitHub Actions WebGL build ${{ github.run_number }}
-        run: bash PostBuildScripts/deploy-ghpages.sh
-
-      - name: Upload Addressables to Unity CCD
-        if: inputs.build_addressables
-        env:
-          UGS_CLI_SERVICE_KEY_ID: ${{ secrets.UGS_CLI_SERVICE_KEY_ID }}
-          UGS_CLI_SERVICE_SECRET_KEY: ${{ secrets.UGS_CLI_SERVICE_SECRET_KEY }}
-          UGS_CLI_PROJECT_ID: ${{ env.UGS_CLI_PROJECT_ID }}
-          UGS_CLI_ENVIRONMENT_NAME: ${{ vars.UGS_CLI_ENVIRONMENT_NAME }}
-          UGS_CLI_BUCKET_NAME: ${{ vars.UGS_CLI_BUCKET_NAME }}
-          ADDRESSABLES_PATH: ServerData/WebGL
-          GITHUB_RUN_NUMBER: ${{ github.run_number }}
-          GITHUB_SHA: ${{ github.sha }}
-        run: bash PostBuildScripts/upload-addressables-ccd.sh
-
       - name: Upload WebGL build artifact
         if: inputs.build_webgl
         uses: actions/upload-artifact@v4
@@ -156,3 +139,28 @@ jobs:
           name: Addressables-WebGL
           path: ServerData/WebGL
           if-no-files-found: error
+
+      - name: Deploy WebGL build to GitHub Pages repo
+        if: inputs.build_webgl && inputs.deploy_webgl
+        env:
+          GITHUB_TOKEN: ${{ secrets.WEBGL_DEPLOY_TOKEN }}
+          GITHUB_USER: ${{ env.WEBGL_DEPLOY_USER }}
+          GITHUB_REPO: ${{ env.WEBGL_DEPLOY_REPO }}
+          GITHUB_EMAIL: ${{ env.WEBGL_DEPLOY_EMAIL }}
+          OUTPUT_DIRECTORY: build/WebGL
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          DEPLOY_COMMIT_MESSAGE: GitHub Actions WebGL build ${{ github.run_number }}
+        run: bash PostBuildScripts/deploy-ghpages.sh
+
+      - name: Upload Addressables to Unity CCD
+        if: inputs.build_addressables && inputs.upload_addressables
+        env:
+          UGS_CLI_SERVICE_KEY_ID: ${{ secrets.UGS_CLI_SERVICE_KEY_ID }}
+          UGS_CLI_SERVICE_SECRET_KEY: ${{ secrets.UGS_CLI_SERVICE_SECRET_KEY }}
+          UGS_CLI_PROJECT_ID: ${{ env.UGS_CLI_PROJECT_ID }}
+          UGS_CLI_ENVIRONMENT_NAME: ${{ vars.UGS_CLI_ENVIRONMENT_NAME }}
+          UGS_CLI_BUCKET_NAME: ${{ vars.UGS_CLI_BUCKET_NAME }}
+          ADDRESSABLES_PATH: ServerData/WebGL
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: bash PostBuildScripts/upload-addressables-ccd.sh
