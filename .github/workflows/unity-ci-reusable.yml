@@ -26,11 +26,11 @@ on:
         type: boolean
         required: true
       deploy_webgl:
-        description: Deploy WebGL output to the GitHub Pages repo (main/manual only)
+        description: Deploy WebGL output to the GitHub Pages repo (master/manual only)
         type: boolean
         default: false
       upload_addressables:
-        description: Upload Addressables to Unity CCD and create a release (main/manual only)
+        description: Upload Addressables to Unity CCD and create a release (master/manual only)
         type: boolean
         default: false
     secrets:

@@ -2,11 +2,11 @@ name: Build WebGL
 
 on:
   pull_request:
-    branches: [main]
+    branches: [master]
     paths:
       - 'Assets/**'
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'Assets/**'
   workflow_dispatch:
