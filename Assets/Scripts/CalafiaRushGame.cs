@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace CalafiaRush
 {
@@ -45,20 +44,7 @@ namespace CalafiaRush
         private GUIStyle _hudStyle;
         private GUIStyle _centerStyle;
         private GUIStyle _buttonStyle;
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Bootstrap()
-        {
-            if (FindObjectOfType<CalafiaRushGame>()) return;
-
-            foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
-            {
-                Destroy(root);
-            }
-
-            new GameObject("Calafia Rush").AddComponent<CalafiaRushGame>();
-        }
-
+        
         private void Awake()
         {
             _keyArt = Resources.Load<Texture2D>("CalafiaRushKeyArt");
