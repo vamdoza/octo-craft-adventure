@@ -65,11 +65,33 @@ if (-not (Test-Path $tmpDir)) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-Write-Host "Copying build output into tmp..."
-Copy-Item -Path (Join-Path $buildfolder "*") -Destination $tmpDir -Recurse -Force
+$deployPaths = @("index.html", "TemplateData", "Build", "StreamingAssets", "WebGL")
 
+function Remove-DeployArtifacts {
+    foreach ($path in $deployPaths) {
+        if (Test-Path $path) {
+            Remove-Item -Path $path -Recurse -Force
+        }
+    }
+}
+
+function Invoke-HoistNestedWebGlBuild {
+    if (-not (Test-Path "WebGL/index.html")) {
+        return
+    }
+
+    Write-Host "Promoting nested WebGL/ output to repository root..."
+    Remove-DeployArtifacts
+    Get-ChildItem -Path "WebGL" -Force | Move-Item -Destination . -Force
+    Remove-Item -Path "WebGL" -Recurse -Force
+}
+
+Write-Host "Syncing build output into tmp..."
 Push-Location $tmpDir
 try {
+    Remove-DeployArtifacts
+    Copy-Item -Path (Join-Path $buildfolder "*") -Destination . -Recurse -Force
+    Invoke-HoistNestedWebGlBuild
     Get-ChildItem
 
     git config --global user.email $env:GITHUB_EMAIL
@@ -77,12 +99,10 @@ try {
     git config --global user.name $gitAuthorName
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-    foreach ($path in @("index.html", "TemplateData", "Build", "StreamingAssets", "WebGL")) {
-        if (Test-Path $path) {
-            git add $path
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        }
-    }
+    git add -A index.html TemplateData Build StreamingAssets
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    git add -u .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     $status = git diff --cached --quiet; $diffExit = $LASTEXITCODE
     if ($diffExit -eq 0) {
