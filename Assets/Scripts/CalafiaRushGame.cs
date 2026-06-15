@@ -17,12 +17,38 @@ namespace CalafiaRush
             public float phase;
         }
 
+        private sealed class BusSkin
+        {
+            public readonly string name;
+            public readonly int price;
+            public readonly Color bodyColor;
+            public readonly Color stripeColor;
+
+            public BusSkin(string name, int price, Color bodyColor, Color stripeColor)
+            {
+                this.name = name;
+                this.price = price;
+                this.bodyColor = bodyColor;
+                this.stripeColor = stripeColor;
+            }
+        }
+
         private static readonly float[] LaneX = { -3.2f, 0f, 3.2f };
+        private static readonly BusSkin[] BusSkins =
+        {
+            new BusSkin("Classic Azul", 0, new Color(0.92f, 0.94f, 0.91f), new Color(0.04f, 0.45f, 0.75f)),
+            new BusSkin("Sunset Coral", 500, new Color(1f, 0.72f, 0.38f), new Color(0.88f, 0.18f, 0.22f)),
+            new BusSkin("Neon Ruta", 1200, new Color(0.12f, 0.95f, 0.72f), new Color(0.75f, 0.08f, 0.88f)),
+            new BusSkin("Baja Gold", 2500, new Color(1f, 0.82f, 0.2f), new Color(0.07f, 0.32f, 0.68f)),
+            new BusSkin("Midnight TJ", 4000, new Color(0.06f, 0.08f, 0.16f), new Color(0.12f, 0.78f, 1f))
+        };
         private readonly List<RoadItem> _items = new List<RoadItem>();
         private readonly List<Transform> _roadSegments = new List<Transform>();
 
         private GameObject _bus;
         private Transform _busBody;
+        private Renderer _busBodyRenderer;
+        private Renderer _busStripeRenderer;
         private Texture2D _keyArt;
         private GameState _state = GameState.Title;
         private int _lane = 1;
@@ -30,7 +56,13 @@ namespace CalafiaRush
         private int _score;
         private int _lap = 1;
         private int _money = 30;
+        private int _garagePoints;
+        private int _ownedSkins = 1;
+        private int _selectedSkin;
         private float _speed;
+        private float _lateralVelocity;
+        private float _driftAmount;
+        private float _brakeDive;
         private float _timeLeft = 75f;
         private float _distance;
         private float _spawnDistance;
@@ -40,6 +72,7 @@ namespace CalafiaRush
         private bool _leftHeld;
         private bool _rightHeld;
         private bool _accelerateHeld;
+        private bool _scoreBanked;
         private GUIStyle _titleStyle;
         private GUIStyle _hudStyle;
         private GUIStyle _centerStyle;
@@ -48,6 +81,7 @@ namespace CalafiaRush
         private void Awake()
         {
             _keyArt = Resources.Load<Texture2D>("CalafiaRushKeyArt");
+            LoadGarage();
             BuildWorld();
         }
 
@@ -84,6 +118,7 @@ namespace CalafiaRush
 
             _bus = CreateBus();
             _bus.transform.position = new Vector3(0f, 0.7f, -3.5f);
+            ApplySelectedSkin();
         }
 
         private void CreateRoadDetails(Transform segment, int index)
@@ -116,19 +151,22 @@ namespace CalafiaRush
         private GameObject CreateBus()
         {
             var root = new GameObject("Calafia");
-            _busBody = CreateCube("Bus Body", Vector3.zero, new Vector3(2.2f, 1.2f, 4.2f),
-                new Color(0.92f, 0.94f, 0.91f)).transform;
+            _busBody = new GameObject("Bus Visual").transform;
             _busBody.SetParent(root.transform, false);
-            _busBody.localPosition = new Vector3(0f, 0.55f, 0f);
 
-            var stripe = CreateCube("Blue Stripe", Vector3.zero, new Vector3(2.28f, 0.28f, 4.25f),
-                new Color(0.04f, 0.45f, 0.75f));
-            stripe.transform.SetParent(root.transform, false);
+            var body = CreateCube("Bus Body", Vector3.zero, new Vector3(2.2f, 1.2f, 4.2f), Color.white);
+            body.transform.SetParent(_busBody, false);
+            body.transform.localPosition = new Vector3(0f, 0.55f, 0f);
+            _busBodyRenderer = body.GetComponent<Renderer>();
+
+            var stripe = CreateCube("Color Stripe", Vector3.zero, new Vector3(2.28f, 0.28f, 4.25f), Color.white);
+            stripe.transform.SetParent(_busBody, false);
             stripe.transform.localPosition = new Vector3(0f, 0.55f, 0f);
+            _busStripeRenderer = stripe.GetComponent<Renderer>();
 
             var windshield = CreateCube("Windshield", Vector3.zero, new Vector3(1.75f, 0.55f, 0.08f),
                 new Color(0.08f, 0.19f, 0.25f));
-            windshield.transform.SetParent(root.transform, false);
+            windshield.transform.SetParent(_busBody, false);
             windshield.transform.localPosition = new Vector3(0f, 0.85f, -2.13f);
 
             for (var z = -1.25f; z <= 1.25f; z += 0.85f)
@@ -137,7 +175,7 @@ namespace CalafiaRush
                 {
                     var window = CreateCube("Window", Vector3.zero, new Vector3(0.06f, 0.48f, 0.62f),
                         new Color(0.1f, 0.25f, 0.31f));
-                    window.transform.SetParent(root.transform, false);
+                    window.transform.SetParent(_busBody, false);
                     window.transform.localPosition = new Vector3(side * 1.12f, 0.85f, z);
                 }
             }
@@ -148,7 +186,7 @@ namespace CalafiaRush
                 {
                     var wheel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                     wheel.name = "Wheel";
-                    wheel.transform.SetParent(root.transform, false);
+                    wheel.transform.SetParent(_busBody, false);
                     wheel.transform.localPosition = new Vector3(x, 0.1f, z);
                     wheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
                     wheel.transform.localScale = new Vector3(0.45f, 0.18f, 0.45f);
@@ -173,18 +211,14 @@ namespace CalafiaRush
             var accelerating = Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.W) || _accelerateHeld;
             var braking = Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.S);
             var targetSpeed = accelerating ? 24f : 10f;
-            if (braking) targetSpeed = 2.5f;
+            if (braking) targetSpeed = 0f;
             if (Time.time < _blockedUntil) targetSpeed = 0f;
-            _speed = Mathf.MoveTowards(_speed, targetSpeed, Time.deltaTime * (accelerating ? 10f : 7f));
+            var longitudinalResponse = braking ? 13f : accelerating ? 5.5f : 3.2f;
+            _speed = Mathf.MoveTowards(_speed, targetSpeed, Time.deltaTime * longitudinalResponse);
 
             if (Input.GetKeyDown(KeyCode.B)) TryBribe();
 
-            var targetX = LaneX[_lane];
-            var position = _bus.transform.position;
-            position.x = Mathf.MoveTowards(position.x, targetX, Time.deltaTime * 9f);
-            _bus.transform.position = position;
-            _busBody.localRotation = Quaternion.Slerp(_busBody.localRotation,
-                Quaternion.Euler(0f, 0f, (targetX - position.x) * -4f), Time.deltaTime * 7f);
+            UpdateBusHandling(braking);
 
             var movement = _speed * Time.deltaTime;
             _distance += movement;
@@ -211,9 +245,60 @@ namespace CalafiaRush
             if (_timeLeft <= 0f)
             {
                 _timeLeft = 0f;
-                _state = GameState.GameOver;
-                _speed = 0f;
+                FinishRun();
             }
+        }
+
+        private void UpdateBusHandling(bool braking)
+        {
+            var targetX = LaneX[_lane];
+            var position = _bus.transform.position;
+            var speedRatio = Mathf.Clamp01(_speed / 24f);
+            var laneError = targetX - position.x;
+
+            // The heavy bus loses lateral grip at speed, especially while braking.
+            var grip = Mathf.Lerp(8.5f, 3.4f, speedRatio);
+            if (braking && _speed > 13f) grip *= 0.38f;
+            var damping = Mathf.Lerp(5.8f, 2.25f, speedRatio);
+            if (braking && _speed > 13f) damping *= 0.42f;
+
+            var lateralAcceleration = laneError * grip - _lateralVelocity * damping;
+            _lateralVelocity += lateralAcceleration * Time.deltaTime;
+            _lateralVelocity = Mathf.Clamp(_lateralVelocity, -8.5f, 8.5f);
+            position.x += _lateralVelocity * Time.deltaTime;
+
+            const float roadEdge = 4.35f;
+            if (Mathf.Abs(position.x) > roadEdge)
+            {
+                position.x = Mathf.Clamp(position.x, -roadEdge, roadEdge);
+                _lateralVelocity *= -0.28f;
+                _speed = Mathf.Max(4f, _speed - 3f);
+                ShowMessage("CURB HIT! HOLD THE ROUTE");
+            }
+
+            _bus.transform.position = position;
+
+            var sliding = speedRatio > 0.58f && Mathf.Abs(_lateralVelocity) > 2.25f;
+            var driftTarget = sliding ? Mathf.InverseLerp(2.25f, 7f, Mathf.Abs(_lateralVelocity)) : 0f;
+            _driftAmount = Mathf.MoveTowards(_driftAmount, driftTarget, Time.deltaTime * (sliding ? 3.5f : 2.2f));
+            _brakeDive = Mathf.MoveTowards(_brakeDive, braking && _speed > 5f ? 1f : 0f, Time.deltaTime * 4f);
+
+            var yaw = -_lateralVelocity * Mathf.Lerp(1.4f, 3.4f, _driftAmount);
+            var roll = -_lateralVelocity * Mathf.Lerp(2.4f, 4.8f, speedRatio);
+            var pitch = _brakeDive * 5.5f;
+            _busBody.localRotation = Quaternion.Slerp(_busBody.localRotation,
+                Quaternion.Euler(pitch, yaw, roll), Time.deltaTime * 5f);
+        }
+
+        private void FinishRun()
+        {
+            _state = GameState.GameOver;
+            _speed = 0f;
+            if (_scoreBanked) return;
+
+            _garagePoints += _score;
+            _scoreBanked = true;
+            SaveGarage();
         }
 
         private void MoveWorld(float movement)
@@ -357,6 +442,12 @@ namespace CalafiaRush
                             _speed = 3f;
                             ShowMessage("RED LIGHT!  -6 SECONDS");
                         }
+                        else if (!red)
+                        {
+                            _timeLeft += 10f;
+                            _score += 75;
+                            ShowMessage("GREEN LIGHT!  +10 SECONDS");
+                        }
                     }
                 }
                 else if (item.type == RoadItemType.Cop && !item.resolved && z < 2f)
@@ -365,7 +456,7 @@ namespace CalafiaRush
                     _blockedUntil = Time.time + 8f;
                     ShowMessage("CHECKPOINT! PRESS B TO PAY $10");
                 }
-                else if (!item.resolved && Mathf.Abs(z + 3.5f) < 1.8f && item.lane == _lane)
+                else if (!item.resolved && Mathf.Abs(z + 3.5f) < 1.8f && item.lane == CurrentBusLane())
                 {
                     ResolveLaneItem(item);
                 }
@@ -440,9 +531,30 @@ namespace CalafiaRush
 
         private void ChangeLane(int direction)
         {
+            var previousLane = _lane;
             _lane = Mathf.Clamp(_lane + direction, 0, 2);
+            if (_lane != previousLane)
+            {
+                var speedRatio = Mathf.Clamp01(_speed / 24f);
+                _lateralVelocity += direction * Mathf.Lerp(1.25f, 3.2f, speedRatio);
+            }
             _leftHeld = false;
             _rightHeld = false;
+        }
+
+        private int CurrentBusLane()
+        {
+            var nearestLane = 0;
+            var nearestDistance = Mathf.Abs(_bus.transform.position.x - LaneX[0]);
+            for (var i = 1; i < LaneX.Length; i++)
+            {
+                var distance = Mathf.Abs(_bus.transform.position.x - LaneX[i]);
+                if (distance >= nearestDistance) continue;
+                nearestLane = i;
+                nearestDistance = distance;
+            }
+
+            return nearestLane;
         }
 
         private void StartGame()
@@ -455,12 +567,62 @@ namespace CalafiaRush
             _lap = 1;
             _money = 30;
             _speed = 0f;
+            _lateralVelocity = 0f;
+            _driftAmount = 0f;
+            _brakeDive = 0f;
+            _bus.transform.position = new Vector3(0f, 0.7f, -3.5f);
+            _busBody.localRotation = Quaternion.identity;
             _timeLeft = 75f;
             _distance = 0f;
             _spawnDistance = 0f;
             _blockedUntil = 0f;
+            _scoreBanked = false;
             _state = GameState.Running;
             ShowMessage("PICK UP PASSENGERS. COMPLETE THE ROUTE!");
+        }
+
+        private void LoadGarage()
+        {
+            _garagePoints = PlayerPrefs.GetInt("CalafiaRush.GaragePoints", 0);
+            _ownedSkins = PlayerPrefs.GetInt("CalafiaRush.OwnedSkins", 1) | 1;
+            _selectedSkin = Mathf.Clamp(PlayerPrefs.GetInt("CalafiaRush.SelectedSkin", 0), 0, BusSkins.Length - 1);
+            if (!OwnsSkin(_selectedSkin)) _selectedSkin = 0;
+        }
+
+        private void SaveGarage()
+        {
+            PlayerPrefs.SetInt("CalafiaRush.GaragePoints", _garagePoints);
+            PlayerPrefs.SetInt("CalafiaRush.OwnedSkins", _ownedSkins);
+            PlayerPrefs.SetInt("CalafiaRush.SelectedSkin", _selectedSkin);
+            PlayerPrefs.Save();
+        }
+
+        private bool OwnsSkin(int index)
+        {
+            return (_ownedSkins & (1 << index)) != 0;
+        }
+
+        private void SelectOrBuySkin(int index)
+        {
+            var skin = BusSkins[index];
+            if (!OwnsSkin(index))
+            {
+                if (_garagePoints < skin.price) return;
+                _garagePoints -= skin.price;
+                _ownedSkins |= 1 << index;
+            }
+
+            _selectedSkin = index;
+            ApplySelectedSkin();
+            SaveGarage();
+        }
+
+        private void ApplySelectedSkin()
+        {
+            if (_busBodyRenderer == null || _busStripeRenderer == null) return;
+            var skin = BusSkins[_selectedSkin];
+            _busBodyRenderer.material.color = skin.bodyColor;
+            _busStripeRenderer.material.color = skin.stripeColor;
         }
 
         private void ShowMessage(string message)
@@ -488,9 +650,12 @@ namespace CalafiaRush
                 GUI.Box(new Rect(Screen.width / 2f - 230f, Screen.height / 2f - 145f, 460f, 290f), string.Empty);
                 GUI.Label(new Rect(Screen.width / 2f - 210f, Screen.height / 2f - 120f, 420f, 55f), "ROUTE FINISHED", _titleStyle);
                 GUI.Label(new Rect(Screen.width / 2f - 180f, Screen.height / 2f - 50f, 360f, 110f),
-                    "Score: " + _score + "\nPassengers: " + _passengers + "\nLaps: " + (_lap - 1), _centerStyle);
-                if (GUI.Button(new Rect(Screen.width / 2f - 110f, Screen.height / 2f + 70f, 220f, 52f), "RUN IT AGAIN", _buttonStyle))
+                    "Score banked: " + _score + "\nGarage Points: " + _garagePoints +
+                    "\nPassengers: " + _passengers + "    Laps: " + (_lap - 1), _centerStyle);
+                if (GUI.Button(new Rect(Screen.width / 2f - 215f, Screen.height / 2f + 70f, 205f, 52f), "RUN IT AGAIN", _buttonStyle))
                     StartGame();
+                if (GUI.Button(new Rect(Screen.width / 2f + 10f, Screen.height / 2f + 70f, 205f, 52f), "GARAGE / MENU", _buttonStyle))
+                    _state = GameState.Title;
             }
         }
 
@@ -501,9 +666,39 @@ namespace CalafiaRush
             GUI.Label(new Rect(40f, 35f, Screen.width - 80f, 80f), "CALAFIA RUSH", _titleStyle);
             GUI.Label(new Rect(55f, 115f, 480f, 150f),
                 "Race the route. Pick up passengers.\nDodge traffic. Respect the lights.\nKeep cash ready for checkpoints.", _hudStyle);
+            DrawGarage();
             GUI.Label(new Rect(55f, Screen.height - 160f, 560f, 90f),
                 "MOVE: A / D or ARROWS     ACCELERATE: W / UP\nBRAKE: S / DOWN     CHECKPOINT: B", _hudStyle);
             if (GUI.Button(new Rect(55f, Screen.height - 75f, 240f, 52f), "START THE ROUTE", _buttonStyle)) StartGame();
+        }
+
+        private void DrawGarage()
+        {
+            var panelWidth = Mathf.Min(410f, Screen.width * 0.43f);
+            var x = Screen.width - panelWidth - 32f;
+            var y = 105f;
+            GUI.Box(new Rect(x, y, panelWidth, 340f), string.Empty);
+            GUI.Label(new Rect(x + 16f, y + 8f, panelWidth - 32f, 42f),
+                "CALAFIA GARAGE     POINTS  " + _garagePoints, _centerStyle);
+
+            for (var i = 0; i < BusSkins.Length; i++)
+            {
+                var skin = BusSkins[i];
+                var rowY = y + 56f + i * 52f;
+                GUI.color = skin.bodyColor;
+                GUI.DrawTexture(new Rect(x + 16f, rowY + 7f, 32f, 32f), Texture2D.whiteTexture);
+                GUI.color = skin.stripeColor;
+                GUI.DrawTexture(new Rect(x + 38f, rowY + 7f, 10f, 32f), Texture2D.whiteTexture);
+                GUI.color = Color.white;
+
+                GUI.Label(new Rect(x + 58f, rowY, panelWidth - 190f, 45f), skin.name, _hudStyle);
+                var owned = OwnsSkin(i);
+                var label = _selectedSkin == i ? "EQUIPPED" : owned ? "EQUIP" : skin.price + " PTS";
+                GUI.enabled = _selectedSkin != i && (owned || _garagePoints >= skin.price);
+                if (GUI.Button(new Rect(x + panelWidth - 126f, rowY + 3f, 110f, 40f), label, _buttonStyle))
+                    SelectOrBuySkin(i);
+                GUI.enabled = true;
+            }
         }
 
         private void DrawHud()
@@ -512,10 +707,12 @@ namespace CalafiaRush
             GUI.Label(new Rect(24f, 19f, Screen.width - 48f, 52f),
                 "TIME  " + Mathf.CeilToInt(_timeLeft).ToString("00") +
                 "     SCORE  " + _score.ToString("00000") +
+                "     GARAGE  " + _garagePoints +
                 "     RIDERS  " + _passengers + "/12" +
                 "     CASH  $" + _money +
                 "     LAP  " + _lap +
-                "     SPEED  " + Mathf.RoundToInt(_speed * 4.2f) + " km/h", _hudStyle);
+                "     SPEED  " + Mathf.RoundToInt(_speed * 4.2f) + " km/h" +
+                (_driftAmount > 0.2f ? "     DRIFT" : string.Empty), _hudStyle);
 
             if (Time.time < _messageUntil)
                 GUI.Label(new Rect(Screen.width / 2f - 360f, 86f, 720f, 50f), _message, _centerStyle);
