@@ -181,6 +181,7 @@ jobs:
           retention-days: 30
 
       - name: Deploy WebGL build to GitHub Pages repo
+        id: deploy_webgl
         if: inputs.build_webgl && inputs.deploy_webgl
         env:
           GITHUB_TOKEN: ${{ secrets.WEBGL_DEPLOY_TOKEN }}
@@ -193,6 +194,7 @@ jobs:
         run: bash PostBuildScripts/deploy-ghpages.sh
 
       - name: Upload Addressables to Unity CCD
+        id: upload_addressables
         if: inputs.build_addressables && inputs.upload_addressables
         env:
           UGS_CLI_SERVICE_KEY_ID: ${{ secrets.UGS_CLI_SERVICE_KEY_ID }}
@@ -204,3 +206,21 @@ jobs:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
           GITHUB_SHA: ${{ github.sha }}
         run: bash PostBuildScripts/upload-addressables-ccd.sh
+
+      - name: Deployment summary
+        if: always()
+        env:
+          BUILD_WEBGL: ${{ inputs.build_webgl }}
+          BUILD_ADDRESSABLES: ${{ inputs.build_addressables }}
+          DEPLOY_WEBGL: ${{ inputs.deploy_webgl }}
+          UPLOAD_ADDRESSABLES: ${{ inputs.upload_addressables }}
+          DEPLOY_WEBGL_OUTCOME: ${{ steps.deploy_webgl.outcome }}
+          UPLOAD_ADDRESSABLES_OUTCOME: ${{ steps.upload_addressables.outcome }}
+          WEBGL_DEPLOY_USER: ${{ env.WEBGL_DEPLOY_USER }}
+          WEBGL_DEPLOY_REPO: ${{ env.WEBGL_DEPLOY_REPO }}
+          UGS_CLI_PROJECT_ID: ${{ env.UGS_CLI_PROJECT_ID }}
+          UGS_CLI_ENVIRONMENT_NAME: ${{ vars.UGS_CLI_ENVIRONMENT_NAME }}
+          UGS_CLI_BUCKET_NAME: ${{ vars.UGS_CLI_BUCKET_NAME }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: bash .github/scripts/write-deployment-summary.sh
