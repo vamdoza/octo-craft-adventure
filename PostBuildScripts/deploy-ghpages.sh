@@ -10,6 +10,7 @@ echo "====================DEPLOYMENT_TO_GITHUB_PAGES_START======================
 set -x
 
 DEPLOY_PATHS=(index.html TemplateData Build StreamingAssets WebGL)
+ROOT_DEPLOY_PATHS=(index.html TemplateData Build StreamingAssets)
 
 require_env() {
   local name="$1"
@@ -62,11 +63,19 @@ hoist_nested_webgl_build() {
   fi
 
   echo "Promoting nested WebGL/ output to repository root..."
-  clean_deploy_artifacts
+  local path
+  for path in "${ROOT_DEPLOY_PATHS[@]}"; do
+    rm -rf "$path"
+  done
+
   shopt -s dotglob nullglob
+  if [ ! -e WebGL/* ]; then
+    echo "Nested WebGL folder is empty." >&2
+    exit 1
+  fi
   mv WebGL/* .
   shopt -u dotglob
-  rmdir WebGL 2>/dev/null || rm -rf WebGL
+  rm -rf WebGL
 }
 
 buildfolder="$(resolve_build_folder)"

@@ -66,6 +66,7 @@ if (-not (Test-Path $tmpDir)) {
 }
 
 $deployPaths = @("index.html", "TemplateData", "Build", "StreamingAssets", "WebGL")
+$rootDeployPaths = @("index.html", "TemplateData", "Build", "StreamingAssets")
 
 function Remove-DeployArtifacts {
     foreach ($path in $deployPaths) {
@@ -81,8 +82,18 @@ function Invoke-HoistNestedWebGlBuild {
     }
 
     Write-Host "Promoting nested WebGL/ output to repository root..."
-    Remove-DeployArtifacts
-    Get-ChildItem -Path "WebGL" -Force | Move-Item -Destination . -Force
+    foreach ($path in $rootDeployPaths) {
+        if (Test-Path $path) {
+            Remove-Item -Path $path -Recurse -Force
+        }
+    }
+
+    $nestedItems = Get-ChildItem -Path "WebGL" -Force
+    if ($nestedItems.Count -eq 0) {
+        throw "Nested WebGL folder is empty."
+    }
+
+    $nestedItems | Move-Item -Destination . -Force
     Remove-Item -Path "WebGL" -Recurse -Force
 }
 
