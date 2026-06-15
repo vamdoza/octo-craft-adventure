@@ -1,18 +1,10 @@
 name: Build Addressables
 
 on:
-  pull_request:
-    branches: [master]
-    paths:
-      - 'Assets/**'
-  push:
-    branches: [master]
-    paths:
-      - 'Assets/**'
   workflow_dispatch:
 
 concurrency:
-  group: build-addressables-${{ github.event.pull_request.number || github.ref }}
+  group: build-addressables-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -23,4 +15,4 @@ jobs:
       build_webgl: false
       build_addressables: true
       deploy_webgl: false
-      upload_addressables: ${{ github.event_name != 'pull_request' }}
+      upload_addressables: true

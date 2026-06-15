@@ -5,10 +5,14 @@ on:
     branches: [master]
     paths:
       - 'Assets/**'
+      - 'Packages/**'
+      - 'ProjectSettings/**'
   push:
     branches: [master]
     paths:
       - 'Assets/**'
+      - 'Packages/**'
+      - 'ProjectSettings/**'
   workflow_dispatch:
 
 concurrency:
