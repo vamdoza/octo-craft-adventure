@@ -206,7 +206,7 @@ namespace UnityBuilderAction
             else if (customBuildName == "")
             {
                 Console.WriteLine($"Invalid argument -customBuildName, defaulting to {defaultCustomBuildName}.");
-                validatedOptions.Add("customBuildName", defaultCustomBuildName);
+                validatedOptions["customBuildName"] = defaultCustomBuildName;
             }
 
             return validatedOptions;
@@ -240,7 +240,7 @@ namespace UnityBuilderAction
                 string displayValue = secret ? "*HIDDEN*" : "\"" + value + "\"";
 
                 Console.WriteLine($"Found flag \"{flag}\" with value {displayValue}.");
-                providedArguments.Add(flag, value);
+                providedArguments[flag] = value;
             }
         }
 

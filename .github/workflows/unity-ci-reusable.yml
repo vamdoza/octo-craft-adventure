@@ -4,11 +4,11 @@
 #   UNITY_LICENSE   - Unity personal license file contents
 #   UNITY_EMAIL     - Unity account email
 #   UNITY_PASSWORD  - Unity account password (alphanumeric recommended)
-#   WEBGL_DEPLOY_TOKEN - PAT with push access to oct-craft-adventure-webgl
-#   UGS_CLI_SERVICE_KEY_ID     - Unity service account key ID (CCD upload)
-#   UGS_CLI_SERVICE_SECRET_KEY - Unity service account secret key (CCD upload)
+#   WEBGL_DEPLOY_TOKEN - Required when deploy_webgl is true
+#   UGS_CLI_SERVICE_KEY_ID     - Required when upload_addressables is true
+#   UGS_CLI_SERVICE_SECRET_KEY - Required when upload_addressables is true
 #
-# Repository variables:
+# Repository variables (required when upload_addressables is true):
 #   UGS_CLI_ENVIRONMENT_NAME - CCD environment (e.g. development)
 #   UGS_CLI_BUCKET_NAME      - CCD bucket name for Addressables remote content
 
@@ -61,13 +61,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           lfs: true
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate publish prerequisites
+        env:
+          DEPLOY_WEBGL: ${{ inputs.deploy_webgl }}
+          UPLOAD_ADDRESSABLES: ${{ inputs.upload_addressables }}
+          WEBGL_DEPLOY_TOKEN: ${{ secrets.WEBGL_DEPLOY_TOKEN }}
+          UGS_CLI_SERVICE_KEY_ID: ${{ secrets.UGS_CLI_SERVICE_KEY_ID }}
+          UGS_CLI_SERVICE_SECRET_KEY: ${{ secrets.UGS_CLI_SERVICE_SECRET_KEY }}
+          UGS_CLI_ENVIRONMENT_NAME: ${{ vars.UGS_CLI_ENVIRONMENT_NAME }}
+          UGS_CLI_BUCKET_NAME: ${{ vars.UGS_CLI_BUCKET_NAME }}
+        run: |
+          set -euo pipefail
+
+          require_nonempty() {
+            local name="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              echo "Missing required $name. Configure it before enabling deploy/upload." >&2
+              exit 1
+            fi
+          }
+
+          if [ "$DEPLOY_WEBGL" = "true" ]; then
+            require_nonempty "secret WEBGL_DEPLOY_TOKEN" "$WEBGL_DEPLOY_TOKEN"
+          fi
+
+          if [ "$UPLOAD_ADDRESSABLES" = "true" ]; then
+            require_nonempty "secret UGS_CLI_SERVICE_KEY_ID" "$UGS_CLI_SERVICE_KEY_ID"
+            require_nonempty "secret UGS_CLI_SERVICE_SECRET_KEY" "$UGS_CLI_SERVICE_SECRET_KEY"
+            require_nonempty "variable UGS_CLI_ENVIRONMENT_NAME" "$UGS_CLI_ENVIRONMENT_NAME"
+            require_nonempty "variable UGS_CLI_BUCKET_NAME" "$UGS_CLI_BUCKET_NAME"
+          fi
 
       - name: Cache Unity Library
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: Library
           key: Library-WebGL-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
@@ -75,7 +108,7 @@ jobs:
             Library-WebGL-
 
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@v1.3.1
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
           tool-cache: false
           android: true
@@ -85,7 +118,7 @@ jobs:
 
       - name: Build WebGL player
         if: inputs.build_webgl && !inputs.build_addressables
-        uses: game-ci/unity-builder@v4
+        uses: game-ci/unity-builder@1d4ee0697f193f54668e98961d79907911f4b4f2 # v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
@@ -98,7 +131,7 @@ jobs:
 
       - name: Build Addressables only
         if: inputs.build_addressables && !inputs.build_webgl
-        uses: game-ci/unity-builder@v4
+        uses: game-ci/unity-builder@1d4ee0697f193f54668e98961d79907911f4b4f2 # v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
@@ -112,7 +145,7 @@ jobs:
 
       - name: Build WebGL player with Addressables
         if: inputs.build_webgl && inputs.build_addressables
-        uses: game-ci/unity-builder@v4
+        uses: game-ci/unity-builder@1d4ee0697f193f54668e98961d79907911f4b4f2 # v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
@@ -126,7 +159,7 @@ jobs:
 
       - name: Upload WebGL build artifact
         if: inputs.build_webgl
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: WebGL-build
           path: build/WebGL
@@ -134,7 +167,7 @@ jobs:
 
       - name: Upload Addressables build artifact
         if: inputs.build_addressables
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Addressables-WebGL
           path: ServerData/WebGL
