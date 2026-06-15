@@ -53,7 +53,7 @@ env:
   FREE_DISK_SPACE: 'false'
   UGS_CLI_PROJECT_ID: 2c6104ea-92b8-4a98-a51f-61ac67af113c
   WEBGL_DEPLOY_USER: vamdoza
-  WEBGL_DEPLOY_REPO: oct-craft-adventure-webgl
+  WEBGL_DEPLOY_REPO: octo-craft-adventure-webgl
   WEBGL_DEPLOY_EMAIL: 41898282+vamdoza@users.noreply.github.com
 
 jobs:
