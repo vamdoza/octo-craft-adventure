@@ -77,10 +77,12 @@ try {
     git config --global user.name $gitAuthorName
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-    git add Build
-    git add StreamingAssets/aa/catalog.json
-    git add StreamingAssets/aa/settings.json
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    foreach ($path in @("index.html", "TemplateData", "Build", "StreamingAssets", "WebGL")) {
+        if (Test-Path $path) {
+            git add $path
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
+    }
 
     $status = git diff --cached --quiet; $diffExit = $LASTEXITCODE
     if ($diffExit -eq 0) {

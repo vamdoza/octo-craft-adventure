@@ -65,9 +65,16 @@ ls
 git config --global user.email "$GITHUB_EMAIL"
 git config --global user.name "$GIT_AUTHOR_NAME"
 
-git add Build
-git add StreamingAssets/aa/catalog.json
-git add StreamingAssets/aa/settings.json
+stage_webgl_output() {
+  local path
+  for path in index.html TemplateData Build StreamingAssets WebGL; do
+    if [ -e "$path" ]; then
+      git add "$path"
+    fi
+  done
+}
+
+stage_webgl_output
 
 if git diff --cached --quiet; then
   echo "No changes to commit; skipping push."
