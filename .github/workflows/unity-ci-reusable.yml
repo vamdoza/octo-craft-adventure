@@ -50,6 +50,7 @@ on:
 env:
   UNITY_VERSION: 2022.3.62f3
   TARGET_PLATFORM: WebGL
+  FREE_DISK_SPACE: 'false'
   UGS_CLI_PROJECT_ID: 2c6104ea-92b8-4a98-a51f-61ac67af113c
   WEBGL_DEPLOY_USER: vamdoza
   WEBGL_DEPLOY_REPO: oct-craft-adventure-webgl
@@ -108,6 +109,7 @@ jobs:
             Library-WebGL-
 
       - name: Free disk space
+        if: env.FREE_DISK_SPACE == 'true'
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
           tool-cache: false
@@ -128,6 +130,7 @@ jobs:
           targetPlatform: ${{ env.TARGET_PLATFORM }}
           buildName: WebGL
           buildsPath: build
+          allowDirtyBuild: true
 
       - name: Build Addressables only
         if: inputs.build_addressables && !inputs.build_webgl
@@ -142,6 +145,7 @@ jobs:
           buildMethod: UnityBuilderAction.BuildScript.BuildAddressablesOnly
           buildName: WebGL
           buildsPath: build
+          allowDirtyBuild: true
 
       - name: Build WebGL player with Addressables
         if: inputs.build_webgl && inputs.build_addressables
@@ -156,6 +160,7 @@ jobs:
           buildMethod: UnityBuilderAction.BuildScript.BuildWithAddressables
           buildName: WebGL
           buildsPath: build
+          allowDirtyBuild: true
 
       - name: Upload WebGL build artifact
         if: inputs.build_webgl
