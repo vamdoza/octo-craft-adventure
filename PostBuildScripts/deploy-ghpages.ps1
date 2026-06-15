@@ -19,7 +19,11 @@ foreach ($name in $requiredVars) {
 $gitAuthorName = if (-not [string]::IsNullOrWhiteSpace($env:USER)) { $env:USER }
                  elseif (-not [string]::IsNullOrWhiteSpace($env:USERNAME)) { $env:USERNAME }
                  else { "unity-cloud-build" }
-$buildNumber = if (-not [string]::IsNullOrWhiteSpace($env:UCB_BUILD_NUMBER)) { $env:UCB_BUILD_NUMBER } else { "unknown" }
+$buildNumber = if (-not [string]::IsNullOrWhiteSpace($env:UCB_BUILD_NUMBER)) { $env:UCB_BUILD_NUMBER }
+                 elseif (-not [string]::IsNullOrWhiteSpace($env:GITHUB_RUN_NUMBER)) { $env:GITHUB_RUN_NUMBER }
+                 else { "unknown" }
+$commitMessage = if (-not [string]::IsNullOrWhiteSpace($env:DEPLOY_COMMIT_MESSAGE)) { $env:DEPLOY_COMMIT_MESSAGE }
+                  else { "CI build $buildNumber" }
 
 function Resolve-BuildFolder {
     if (-not [string]::IsNullOrWhiteSpace($env:UNITY_PLAYER_PATH)) {
@@ -84,7 +88,6 @@ try {
         exit 0
     }
 
-    $commitMessage = "unity cloud build $buildNumber"
     git commit -m $commitMessage
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

@@ -1,0 +1,4 @@
+# GitHub Actions and YAML linting expect LF line endings.
+*.yml text eol=lf
+*.yaml text eol=lf
+.github/workflows/** text eol=lf
