@@ -1,6 +1,23 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+focus: high
+
 reviews:
+  profile: chill
+  poem: false
+  in_progress_fortune: false
   auto_review:
     enabled: true
     base_branches:
       - "master"
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        Post inline PR review comments ONLY for Critical and Major severity findings.
+
+        - Critical (🔴 Critical): Severe issues that could cause system failures, security breaches, or data loss.
+        - Major (🟠 Major): Significant problems that impact functionality or performance.
+
+        Do NOT post inline comments for Minor, Trivial, Info, style, naming, formatting, documentation, or nitpick findings.
+        Do not duplicate issues already enforced by CI or build pipelines.
+        Omit lower-severity observations entirely instead of posting inline comments.

@@ -169,6 +169,7 @@ jobs:
           name: WebGL-build
           path: build/WebGL
           if-no-files-found: error
+          retention-days: 30
 
       - name: Upload Addressables build artifact
         if: inputs.build_addressables
@@ -177,6 +178,7 @@ jobs:
           name: Addressables-WebGL
           path: ServerData/WebGL
           if-no-files-found: error
+          retention-days: 30
 
       - name: Deploy WebGL build to GitHub Pages repo
         if: inputs.build_webgl && inputs.deploy_webgl
