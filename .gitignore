@@ -76,3 +76,4 @@ crashlytics-build.properties
 # Rider settings
 .idea/
 *.DotSettings
+.DS_Store
