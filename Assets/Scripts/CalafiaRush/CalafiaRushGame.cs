@@ -52,6 +52,28 @@ namespace CalafiaRush
             new BusSkin("Midnight TJ", 4000, new Color(0.06f, 0.08f, 0.16f), new Color(0.12f, 0.78f, 1f))
         };
 
+        [Header("Bus Speed")]
+        [SerializeField] private float _maxSpeed = 24f;
+        [SerializeField] private float _cruiseSpeed = 10f;
+        [SerializeField] private float _accelResponse = 5.5f;
+        [SerializeField] private float _cruiseResponse = 3.2f;
+        [SerializeField] private float _brakeResponse = 13f;
+
+        [Header("Bus Steering")]
+        [SerializeField] private float _gripAtLowSpeed = 14f;
+        [SerializeField] private float _gripAtHighSpeed = 6f;
+        [SerializeField] private float _dampingAtLowSpeed = 6.8f;
+        [SerializeField] private float _dampingAtHighSpeed = 2f;
+        [SerializeField] private float _maxLateralVelocity = 14f;
+        [SerializeField] private float _laneImpulseAtLowSpeed = 3.5f;
+        [SerializeField] private float _laneImpulseAtHighSpeed = 5.5f;
+        [SerializeField] private float _brakeHandlingSpeedThreshold = 13f;
+        [SerializeField] private float _brakeGripMultiplier = 0.38f;
+        [SerializeField] private float _brakeDampingMultiplier = 0.42f;
+
+        [Header("Bus Visuals")]
+        [SerializeField] private float _bodyTiltSlerpSpeed = 7f;
+
         private readonly List<RoadItem> _items = new List<RoadItem>();
         private readonly List<Transform> _roadSegments = new List<Transform>();
 
@@ -308,10 +330,10 @@ namespace CalafiaRush
 
             var accelerating = _input.Accelerate;
             var braking = _input.Brake;
-            var targetSpeed = accelerating ? 24f : 10f;
+            var targetSpeed = accelerating ? _maxSpeed : _cruiseSpeed;
             if (braking) targetSpeed = 0f;
             if (Time.time < _blockedUntil) targetSpeed = 0f;
-            var longitudinalResponse = braking ? 13f : accelerating ? 5.5f : 3.2f;
+            var longitudinalResponse = braking ? _brakeResponse : accelerating ? _accelResponse : _cruiseResponse;
             _speed = Mathf.MoveTowards(_speed, targetSpeed, Time.deltaTime * longitudinalResponse);
 
             if (_input.BribePressed) TryBribe();
@@ -351,17 +373,17 @@ namespace CalafiaRush
         {
             var targetX = LaneX[_lane];
             var position = _bus.transform.position;
-            var speedRatio = Mathf.Clamp01(_speed / 24f);
+            var speedRatio = _maxSpeed > 0f ? Mathf.Clamp01(_speed / _maxSpeed) : 0f;
             var laneError = targetX - position.x;
 
-            var grip = Mathf.Lerp(8.5f, 3.4f, speedRatio);
-            if (braking && _speed > 13f) grip *= 0.38f;
-            var damping = Mathf.Lerp(5.8f, 2.25f, speedRatio);
-            if (braking && _speed > 13f) damping *= 0.42f;
+            var grip = Mathf.Lerp(_gripAtLowSpeed, _gripAtHighSpeed, speedRatio);
+            if (braking && _speed > _brakeHandlingSpeedThreshold) grip *= _brakeGripMultiplier;
+            var damping = Mathf.Lerp(_dampingAtLowSpeed, _dampingAtHighSpeed, speedRatio);
+            if (braking && _speed > _brakeHandlingSpeedThreshold) damping *= _brakeDampingMultiplier;
 
             var lateralAcceleration = laneError * grip - _lateralVelocity * damping;
             _lateralVelocity += lateralAcceleration * Time.deltaTime;
-            _lateralVelocity = Mathf.Clamp(_lateralVelocity, -8.5f, 8.5f);
+            _lateralVelocity = Mathf.Clamp(_lateralVelocity, -_maxLateralVelocity, _maxLateralVelocity);
             position.x += _lateralVelocity * Time.deltaTime;
 
             const float roadEdge = 4.35f;
@@ -384,7 +406,7 @@ namespace CalafiaRush
             var roll = -_lateralVelocity * Mathf.Lerp(2.4f, 4.8f, speedRatio);
             var pitch = _brakeDive * 5.5f;
             _busBody.localRotation = Quaternion.Slerp(_busBody.localRotation,
-                Quaternion.Euler(pitch, yaw, roll), Time.deltaTime * 5f);
+                Quaternion.Euler(pitch, yaw, roll), Time.deltaTime * _bodyTiltSlerpSpeed);
         }
 
         private void FinishRun()
@@ -619,8 +641,8 @@ namespace CalafiaRush
             _lane = Mathf.Clamp(_lane + direction, 0, 2);
             if (_lane != previousLane)
             {
-                var speedRatio = Mathf.Clamp01(_speed / 24f);
-                _lateralVelocity += direction * Mathf.Lerp(1.25f, 3.2f, speedRatio);
+                var speedRatio = _maxSpeed > 0f ? Mathf.Clamp01(_speed / _maxSpeed) : 0f;
+                _lateralVelocity += direction * Mathf.Lerp(_laneImpulseAtLowSpeed, _laneImpulseAtHighSpeed, speedRatio);
             }
 
             _input.ClearLaneHold();
