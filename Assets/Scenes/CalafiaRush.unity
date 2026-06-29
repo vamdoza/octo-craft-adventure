@@ -364,6 +364,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f7edf67f6b21f3f4ca59302031f1e113, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _maxSpeed: 24
+  _cruiseSpeed: 10
+  _accelResponse: 5.5
+  _cruiseResponse: 3.2
+  _brakeResponse: 13
+  _gripAtLowSpeed: 14
+  _gripAtHighSpeed: 6
+  _dampingAtLowSpeed: 6.8
+  _dampingAtHighSpeed: 2
+  _maxLateralVelocity: 14
+  _laneImpulseAtLowSpeed: 3.5
+  _laneImpulseAtHighSpeed: 5.5
+  _brakeHandlingSpeedThreshold: 13
+  _brakeGripMultiplier: 0.38
+  _brakeDampingMultiplier: 0.42
+  _bodyTiltSlerpSpeed: 7
 --- !u!114 &576282796
 MonoBehaviour:
   m_ObjectHideFlags: 0
