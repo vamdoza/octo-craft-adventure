@@ -43,6 +43,10 @@ namespace CalafiaRush
         }
 
         private static readonly float[] LaneX = { -3.2f, 0f, 3.2f };
+        private const int LeftLaneIndex = 0;
+        private const int CenterLaneIndex = 1;
+        private const int RightLaneIndex = 2;
+        private const int PassengerLaneIndex = RightLaneIndex;
         private static readonly BusSkin[] BusSkins =
         {
             new BusSkin("Classic Azul", 0, new Color(0.92f, 0.94f, 0.91f), new Color(0.04f, 0.45f, 0.75f)),
@@ -436,12 +440,12 @@ namespace CalafiaRush
             var roll = Random.value;
             if (roll < 0.35f)
             {
-                SpawnPassenger(Random.Range(0, 3));
+                SpawnPassengerGroup();
             }
             else if (roll < 0.67f)
             {
-                SpawnTraffic(Random.Range(0, 3));
-                if (Random.value < 0.35f) SpawnTraffic(Random.Range(0, 3));
+                SpawnTraffic(PickTrafficLane());
+                if (Random.value < 0.45f) SpawnTraffic(PickTrafficLane());
             }
             else if (roll < 0.82f)
             {
@@ -457,15 +461,32 @@ namespace CalafiaRush
             }
         }
 
-        private void SpawnPassenger(int lane)
+        private static int PickTrafficLane()
         {
-            var side = lane == 0 ? -1f : 1f;
-            var passenger = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            passenger.name = "Waiting Passenger";
-            passenger.transform.position = new Vector3(LaneX[lane] + side * 1.1f, 0.85f, 42f);
-            passenger.transform.localScale = new Vector3(0.55f, 0.85f, 0.55f);
-            passenger.GetComponent<Renderer>().material.color = Color.HSVToRGB(Random.value, 0.7f, 0.95f);
-            AddItem(passenger, RoadItemType.Passenger, lane);
+            var roll = Random.value;
+            if (roll < 0.1f) return LeftLaneIndex;
+            if (roll < 0.32f) return CenterLaneIndex;
+            return RightLaneIndex;
+        }
+
+        private void SpawnPassengerGroup()
+        {
+            const float sidewalkOffset = 1.1f;
+            const float queueSpacing = 0.9f;
+            var groupSize = Random.Range(1, 5);
+
+            for (var i = 0; i < groupSize; i++)
+            {
+                var passenger = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                passenger.name = groupSize > 1 ? "Waiting Passenger " + (i + 1) : "Waiting Passenger";
+                passenger.transform.position = new Vector3(
+                    LaneX[PassengerLaneIndex] + sidewalkOffset,
+                    0.85f,
+                    42f + i * queueSpacing);
+                passenger.transform.localScale = new Vector3(0.55f, 0.85f, 0.55f);
+                passenger.GetComponent<Renderer>().material.color = Color.HSVToRGB(Random.value, 0.7f, 0.95f);
+                AddItem(passenger, RoadItemType.Passenger, PassengerLaneIndex);
+            }
         }
 
         private void SpawnTraffic(int lane)
