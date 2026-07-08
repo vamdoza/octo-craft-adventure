@@ -271,91 +271,44 @@ namespace CalafiaRush
 
             for (var i = 0; i < 7; i++)
             {
-                var segment = CreateCube("Road Segment", new Vector3(0f, 0f, i * 12f - 10f),
+                var segment = CalafiaRushWorldDraw.DrawRoadSegment(new Vector3(0f, 0f, i * 12f - 10f),
                     new Vector3(11f, 0.15f, 12f), new Color(0.17f, 0.19f, 0.22f));
                 _roadSegments.Add(segment.transform);
-                CreateRoadDetails(segment.transform, i);
+                DrawRoadDetails(segment.transform, i);
             }
 
-            _bus = CreateBus();
+            var skin = BusSkins[_selectedSkin];
+            var busVisual = CalafiaRushWorldDraw.DrawBus(skin.bodyColor, skin.stripeColor);
+            _bus = busVisual.root;
+            _busBody = busVisual.body;
+            _busBodyRenderer = busVisual.bodyRenderer;
+            _busStripeRenderer = busVisual.stripeRenderer;
             _bus.transform.position = new Vector3(0f, 0.7f, -3.5f);
-            ApplySelectedSkin();
         }
 
-        private void CreateRoadDetails(Transform segment, int index)
+        private static void DrawRoadDetails(Transform segment, int index)
         {
             for (var laneDivider = -1; laneDivider <= 1; laneDivider += 2)
             {
                 for (var stripe = 0; stripe < 3; stripe++)
                 {
-                    var marker = CreateCube("Lane Marker", new Vector3(laneDivider * 1.6f, 0.1f,
-                            segment.position.z - 4f + stripe * 4f), new Vector3(0.12f, 0.03f, 2f),
-                        new Color(1f, 0.91f, 0.45f));
-                    marker.transform.SetParent(segment, true);
+                    CalafiaRushWorldDraw.DrawLaneMarker(segment,
+                        new Vector3(laneDivider * 1.6f, 0.1f, segment.position.z - 4f + stripe * 4f),
+                        new Vector3(0.12f, 0.03f, 2f), new Color(1f, 0.91f, 0.45f));
                 }
             }
 
             foreach (var side in new[] { -1f, 1f })
             {
-                var sidewalk = CreateCube("Sidewalk", new Vector3(side * 6.5f, 0.12f, segment.position.z),
+                CalafiaRushWorldDraw.DrawSidewalk(segment,
+                    new Vector3(side * 6.5f, 0.12f, segment.position.z),
                     new Vector3(2f, 0.28f, 12f), new Color(0.66f, 0.57f, 0.49f));
-                sidewalk.transform.SetParent(segment, true);
 
                 var buildingColor = Color.HSVToRGB((index * 0.13f + (side > 0 ? 0.06f : 0f)) % 1f, 0.58f, 0.88f);
-                var building = CreateCube("Colorful Building",
+                CalafiaRushWorldDraw.DrawBuilding(segment,
                     new Vector3(side * 8.4f, 1.5f + index % 3, segment.position.z + (index % 2 == 0 ? 2f : -2f)),
                     new Vector3(2.1f, 3f + (index % 3) * 1.2f, 5f), buildingColor);
-                building.transform.SetParent(segment, true);
             }
-        }
-
-        private GameObject CreateBus()
-        {
-            var root = new GameObject("Calafia");
-            _busBody = new GameObject("Bus Visual").transform;
-            _busBody.SetParent(root.transform, false);
-
-            var body = CreateCube("Bus Body", Vector3.zero, new Vector3(2.2f, 1.2f, 4.2f), Color.white);
-            body.transform.SetParent(_busBody, false);
-            body.transform.localPosition = new Vector3(0f, 0.55f, 0f);
-            _busBodyRenderer = body.GetComponent<Renderer>();
-
-            var stripe = CreateCube("Color Stripe", Vector3.zero, new Vector3(2.28f, 0.28f, 4.25f), Color.white);
-            stripe.transform.SetParent(_busBody, false);
-            stripe.transform.localPosition = new Vector3(0f, 0.55f, 0f);
-            _busStripeRenderer = stripe.GetComponent<Renderer>();
-
-            var windshield = CreateCube("Windshield", Vector3.zero, new Vector3(1.75f, 0.55f, 0.08f),
-                new Color(0.08f, 0.19f, 0.25f));
-            windshield.transform.SetParent(_busBody, false);
-            windshield.transform.localPosition = new Vector3(0f, 0.85f, -2.13f);
-
-            for (var z = -1.25f; z <= 1.25f; z += 0.85f)
-            {
-                foreach (var side in new[] { -1f, 1f })
-                {
-                    var window = CreateCube("Window", Vector3.zero, new Vector3(0.06f, 0.48f, 0.62f),
-                        new Color(0.1f, 0.25f, 0.31f));
-                    window.transform.SetParent(_busBody, false);
-                    window.transform.localPosition = new Vector3(side * 1.12f, 0.85f, z);
-                }
-            }
-
-            foreach (var x in new[] { -0.82f, 0.82f })
-            {
-                foreach (var z in new[] { -1.35f, 1.35f })
-                {
-                    var wheel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                    wheel.name = "Wheel";
-                    wheel.transform.SetParent(_busBody, false);
-                    wheel.transform.localPosition = new Vector3(x, 0.1f, z);
-                    wheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-                    wheel.transform.localScale = new Vector3(0.45f, 0.18f, 0.45f);
-                    wheel.GetComponent<Renderer>().material.color = new Color(0.04f, 0.04f, 0.04f);
-                }
-            }
-
-            return root;
         }
 
         private void Update()
@@ -543,91 +496,40 @@ namespace CalafiaRush
 
             for (var i = 0; i < groupSize; i++)
             {
-                var passenger = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-                passenger.name = groupSize > 1 ? "Waiting Passenger " + (i + 1) : "Waiting Passenger";
-                passenger.transform.position = new Vector3(
-                    LaneX[PassengerLaneIndex] + sidewalkOffset,
-                    0.85f,
-                    42f + i * queueSpacing);
-                passenger.transform.localScale = new Vector3(0.55f, 0.85f, 0.55f);
-                passenger.GetComponent<Renderer>().material.color = Color.HSVToRGB(Random.value, 0.7f, 0.95f);
+                var passenger = CalafiaRushWorldDraw.DrawPassenger(
+                    new Vector3(LaneX[PassengerLaneIndex] + sidewalkOffset, 0.85f, 42f + i * queueSpacing),
+                    new Vector3(0.55f, 0.85f, 0.55f),
+                    Color.HSVToRGB(Random.value, 0.7f, 0.95f));
+                if (groupSize > 1) passenger.name = "Waiting Passenger " + (i + 1);
                 AddItem(passenger, RoadItemType.Passenger, PassengerLaneIndex);
             }
         }
 
         private void SpawnTraffic(int lane)
         {
-            var car = CreateCube("Traffic", new Vector3(LaneX[lane], 0.55f, 42f),
-                new Vector3(1.8f, 1f, 3.4f), Color.HSVToRGB(Random.value, 0.65f, 0.9f));
+            var car = CalafiaRushWorldDraw.DrawCar(new Vector3(LaneX[lane], 0.55f, 42f),
+                Color.HSVToRGB(Random.value, 0.65f, 0.9f));
             AddItem(car, RoadItemType.Traffic, lane);
         }
 
         private void SpawnLight()
         {
-            var root = new GameObject("Traffic Light");
-            root.transform.position = new Vector3(0f, 0f, 44f);
-
-            foreach (var side in new[] { -1f, 1f })
-            {
-                CreateChildCube(root.transform, side < 0f ? "Pole Left" : "Pole Right",
-                    new Vector3(side * 5.2f, 2f, 0f), new Vector3(0.18f, 4f, 0.18f),
-                    new Color(0.2f, 0.2f, 0.2f));
-            }
-
-            const float spanLength = 10.4f;
-            CreateChildCube(root.transform, "Span Arm", new Vector3(0f, 3.8f, 0f),
-                new Vector3(spanLength, 0.16f, 0.16f), new Color(0.2f, 0.2f, 0.2f));
-
-            CreateChildCube(root.transform, "Signal", new Vector3(0f, 3.8f, -0.14f),
-                new Vector3(3.8f, 0.42f, 0.1f), new Color(1f, 0.08f, 0.04f));
+            var root = CalafiaRushWorldDraw.DrawSemaphore(new Vector3(0f, 0f, 44f),
+                CalafiaRushWorldDraw.SemaphoreRedColor);
             AddItem(root, RoadItemType.Light, -1).phase = Random.Range(0f, LightCycleDuration);
         }
 
         private void SpawnCop()
         {
-            var root = new GameObject("Police Checkpoint");
-            root.transform.position = new Vector3(0f, 0f, 46f);
-
-            const float sidewalkX = 6.5f;
-            var tollBooth = new GameObject("Toll Booth").transform;
-            tollBooth.SetParent(root.transform, false);
-            tollBooth.localPosition = new Vector3(sidewalkX, 0f, 0f);
-
-            CreateChildCube(tollBooth, "Toll Base", new Vector3(0f, 0.14f, 0f),
-                new Vector3(1.5f, 0.28f, 1.25f), new Color(0.58f, 0.5f, 0.44f));
-            CreateChildCube(tollBooth, "Toll Cabin", new Vector3(0f, 0.95f, 0f),
-                new Vector3(1.35f, 1.75f, 1.1f), new Color(0.82f, 0.84f, 0.88f));
-            CreateChildCube(tollBooth, "Toll Roof", new Vector3(0f, 1.92f, 0f),
-                new Vector3(1.55f, 0.18f, 1.35f), new Color(0.14f, 0.2f, 0.36f));
-            CreateChildCube(tollBooth, "Toll Window", new Vector3(-0.7f, 1.05f, 0f),
-                new Vector3(0.08f, 0.55f, 0.7f), new Color(0.12f, 0.28f, 0.34f));
-            CreateChildCube(tollBooth, "Toll Sign", new Vector3(-0.72f, 1.5f, 0.62f),
-                new Vector3(0.55f, 0.35f, 0.06f), new Color(0.95f, 0.86f, 0.24f));
-
-            var barrierPivot = new GameObject("Barrier Pivot").transform;
-            barrierPivot.SetParent(tollBooth, false);
-            barrierPivot.localPosition = new Vector3(-0.72f, 0.6f, 0f);
-
-            const float roadLeftEdge = -5.5f;
-            var pivotWorldX = sidewalkX + barrierPivot.localPosition.x;
-            var armLength = pivotWorldX - roadLeftEdge;
-            var arm = CreateChildCube(barrierPivot, "Checkpoint Barrier", new Vector3(-armLength * 0.5f, 0f, 0f),
-                new Vector3(armLength, 0.22f, 0.35f), new Color(0.95f, 0.86f, 0.24f));
-            CreateChildCube(barrierPivot, "Barrier Hinge", Vector3.zero,
-                new Vector3(0.28f, 0.35f, 0.4f), new Color(0.2f, 0.2f, 0.22f));
-
-            var item = AddItem(root, RoadItemType.Cop, -1);
-            item.barrierPivot = barrierPivot;
+            var checkpoint = CalafiaRushWorldDraw.DrawCheckpoint(new Vector3(0f, 0f, 46f));
+            var item = AddItem(checkpoint.root, RoadItemType.Cop, -1);
+            item.barrierPivot = checkpoint.barrierPivot;
         }
 
         private void SpawnCoin(int lane)
         {
-            var coin = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            coin.name = "Fare Bonus";
-            coin.transform.position = new Vector3(LaneX[lane], 1f, 42f);
-            coin.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            coin.transform.localScale = new Vector3(0.65f, 0.12f, 0.65f);
-            coin.GetComponent<Renderer>().material.color = new Color(1f, 0.78f, 0.12f);
+            var coin = CalafiaRushWorldDraw.DrawCoin(new Vector3(LaneX[lane], 1f, 42f),
+                CalafiaRushWorldDraw.CoinColor);
             AddItem(coin, RoadItemType.Coin, lane);
         }
 
@@ -727,18 +629,13 @@ namespace CalafiaRush
 
         private void UpdateTrafficLightVisual(RoadItem item)
         {
-            var signal = item.gameObject.transform.Find("Signal");
-            if (!signal) return;
-
-            var renderer = signal.GetComponent<Renderer>();
-            if (!renderer) return;
-
-            renderer.material.color = GetTrafficLightPhase(item) switch
+            var signalColor = GetTrafficLightPhase(item) switch
             {
-                TrafficLightPhase.Red => new Color(1f, 0.08f, 0.04f),
-                TrafficLightPhase.Yellow => new Color(1f, 0.82f, 0.08f),
-                _ => new Color(0.08f, 0.95f, 0.24f)
+                TrafficLightPhase.Red => CalafiaRushWorldDraw.SemaphoreRedColor,
+                TrafficLightPhase.Yellow => CalafiaRushWorldDraw.SemaphoreYellowColor,
+                _ => CalafiaRushWorldDraw.SemaphoreGreenColor
             };
+            CalafiaRushWorldDraw.SetSemaphoreSignalColor(item.gameObject, signalColor);
         }
 
         private void UpdateCheckpointBarrier(RoadItem item)
@@ -943,8 +840,9 @@ namespace CalafiaRush
         {
             if (_busBodyRenderer == null || _busStripeRenderer == null) return;
             var skin = BusSkins[_selectedSkin];
-            _busBodyRenderer.material.color = skin.bodyColor;
-            _busStripeRenderer.material.color = skin.stripeColor;
+            CalafiaRushWorldDraw.ApplyBusColors(
+                new CalafiaRushWorldDraw.BusVisualRefs(_bus, _busBody, _busBodyRenderer, _busStripeRenderer),
+                skin.bodyColor, skin.stripeColor);
         }
 
         private void ShowMessage(string message)
@@ -953,26 +851,5 @@ namespace CalafiaRush
             _messageUntil = Time.time + 2.4f;
         }
 
-        private static GameObject CreateCube(string name, Vector3 position, Vector3 scale, Color color)
-        {
-            var gameObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            gameObject.name = name;
-            gameObject.transform.position = position;
-            gameObject.transform.localScale = scale;
-            gameObject.GetComponent<Renderer>().material.color = color;
-            return gameObject;
-        }
-
-        private static GameObject CreateChildCube(Transform parent, string name, Vector3 localPosition, Vector3 localScale,
-            Color color)
-        {
-            var gameObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            gameObject.name = name;
-            gameObject.transform.SetParent(parent, false);
-            gameObject.transform.localPosition = localPosition;
-            gameObject.transform.localScale = localScale;
-            gameObject.GetComponent<Renderer>().material.color = color;
-            return gameObject;
-        }
     }
 }
