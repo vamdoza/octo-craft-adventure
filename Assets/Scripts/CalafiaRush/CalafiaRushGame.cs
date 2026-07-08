@@ -486,8 +486,17 @@ namespace CalafiaRush
             }
             else if (roll < 0.74f)
             {
-                SpawnTraffic(PickTrafficLane());
-                if (Random.value < 0.45f) SpawnTraffic(PickTrafficLane());
+                const float trafficSpawnZ = 42f;
+                var firstLane = PickTrafficLane();
+                SpawnTraffic(firstLane, trafficSpawnZ);
+                if (Random.value < 0.45f)
+                {
+                    var secondLane = PickTrafficLane();
+                    var secondSpawnZ = secondLane == firstLane
+                        ? trafficSpawnZ + GetTrafficFollowGap()
+                        : trafficSpawnZ;
+                    SpawnTraffic(secondLane, secondSpawnZ);
+                }
             }
             else
             {
@@ -520,9 +529,9 @@ namespace CalafiaRush
             }
         }
 
-        private void SpawnTraffic(int lane)
+        private void SpawnTraffic(int lane, float spawnZ = 42f)
         {
-            var car = CalafiaRushWorldDraw.DrawCar(new Vector3(LaneX[lane], 0.55f, 42f),
+            var car = CalafiaRushWorldDraw.DrawCar(new Vector3(LaneX[lane], 0.55f, spawnZ),
                 Color.HSVToRGB(Random.value, 0.65f, 0.9f));
             var item = AddItem(car, RoadItemType.Traffic, lane);
             item.trafficTargetSpeed = GetRandomTrafficSpeed(lane);
@@ -640,6 +649,11 @@ namespace CalafiaRush
             }
         }
 
+        private float GetTrafficFollowGap()
+        {
+            return Mathf.Max(_movingCarFollowGap, CalafiaRushWorldDraw.TrafficCarLength);
+        }
+
         private void UpdateTrafficMovement(float worldMovement)
         {
             if (Time.deltaTime <= 0f) return;
@@ -682,8 +696,7 @@ namespace CalafiaRush
 
                     if (follower != null && follower.gameObject)
                     {
-                        var followGap = Mathf.Max(_movingCarFollowGap, CalafiaRushWorldDraw.TrafficCarLength);
-                        var followerLimitZ = follower.gameObject.transform.position.z + followGap;
+                        var followerLimitZ = follower.gameObject.transform.position.z + GetTrafficFollowGap();
                         if (proposedZ < followerLimitZ) proposedZ = followerLimitZ;
                     }
 
