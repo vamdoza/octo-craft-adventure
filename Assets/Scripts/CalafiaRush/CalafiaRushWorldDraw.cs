@@ -4,6 +4,8 @@ namespace CalafiaRush
 {
     public static class CalafiaRushWorldDraw
     {
+        public const float TrafficCarLength = 3.4f;
+
         public static readonly Color SemaphoreRedColor = new Color(1f, 0.08f, 0.04f);
         public static readonly Color SemaphoreYellowColor = new Color(1f, 0.82f, 0.08f);
         public static readonly Color SemaphoreGreenColor = new Color(0.08f, 0.95f, 0.24f);
@@ -105,7 +107,7 @@ namespace CalafiaRush
 
         public static GameObject DrawCar(Vector3 position, Color bodyColor)
         {
-            return CreateCube("Traffic", position, new Vector3(1.8f, 1f, 3.4f), bodyColor);
+            return CreateCube("Traffic", position, new Vector3(1.8f, 1f, TrafficCarLength), bodyColor);
         }
 
         public static GameObject DrawPassenger(Vector3 position, Vector3 scale, Color color)

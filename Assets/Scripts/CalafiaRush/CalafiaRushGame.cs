@@ -100,10 +100,10 @@ namespace CalafiaRush
         [SerializeField] private float _movingCarMaxSpeed = 0.22f;
         [SerializeField] private float _movingCarAccelRate = 0.45f;
         [SerializeField] private float _movingCarBrakeRate = 2.5f;
-        [SerializeField] private float _movingCarFollowGap = 3.2f;
+        [SerializeField] private float _movingCarFollowGap = CalafiaRushWorldDraw.TrafficCarLength;
 
         private const float BusFrontZOffset = 2.1f;
-        private const float TrafficRearZOffset = 1.7f;
+        private const float TrafficRearZOffset = CalafiaRushWorldDraw.TrafficCarLength * 0.5f;
         private const float LightCycleDuration = 9f;
         private const float LightGreenDuration = 4f;
         private const float LightYellowDuration = 2f;
@@ -682,7 +682,8 @@ namespace CalafiaRush
 
                     if (follower != null && follower.gameObject)
                     {
-                        var followerLimitZ = follower.gameObject.transform.position.z + _movingCarFollowGap;
+                        var followGap = Mathf.Max(_movingCarFollowGap, CalafiaRushWorldDraw.TrafficCarLength);
+                        var followerLimitZ = follower.gameObject.transform.position.z + followGap;
                         if (proposedZ < followerLimitZ) proposedZ = followerLimitZ;
                     }
 
