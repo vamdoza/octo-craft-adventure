@@ -22,21 +22,26 @@ namespace CalafiaRush
         private GameObject _mainMenuPanel;
         private GameObject _gameUiPanel;
         private GameObject _garagePanel;
+        private GameObject _settingsPanel;
         private GameObject _gameOverPanel;
         private Transform _garageSkinList;
         private TextMeshProUGUI _garagePointsLabel;
         private TextMeshProUGUI _gameOverSummary;
+        private TextMeshProUGUI _settingsValueLabel;
         private Button _playButton;
         private Button _garageButton;
         private Button _settingsButton;
         private Button _quitButton;
         private Button _garageBackButton;
+        private Button _settingsBackButton;
+        private Button _autoBrakeToggleButton;
         private Button _retryButton;
         private Button _menuButton;
         private GUIStyle _hudStyle;
         private GUIStyle _centerStyle;
         private GUIStyle _buttonStyle;
         private bool _garageVisible;
+        private bool _settingsVisible;
 
         private void Awake()
         {
@@ -45,6 +50,7 @@ namespace CalafiaRush
 
             CachePanelReferences();
             EnsureGaragePanel();
+            EnsureSettingsPanel();
         }
 
         private void Start()
@@ -90,6 +96,7 @@ namespace CalafiaRush
             _mainMenuPanel = transform.Find("MainMenuPanel")?.gameObject;
             _gameUiPanel = transform.Find("GameUIPanel")?.gameObject;
             _garagePanel = transform.Find("GaragePanel")?.gameObject;
+            _settingsPanel = transform.Find("SettingsPanel")?.gameObject;
 
             if (_mainMenuPanel != null)
             {
@@ -199,6 +206,108 @@ namespace CalafiaRush
                 new Vector2(0.5f, 0f));
         }
 
+        private void EnsureSettingsPanel()
+        {
+            if (_settingsPanel != null) return;
+
+            var mainMenuImage = _mainMenuPanel != null
+                ? _mainMenuPanel.GetComponent<Image>()
+                : null;
+
+            _settingsPanel = new GameObject("SettingsPanel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            _settingsPanel.transform.SetParent(transform, false);
+
+            var rect = _settingsPanel.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+
+            var background = _settingsPanel.GetComponent<Image>();
+            if (mainMenuImage != null)
+            {
+                background.sprite = mainMenuImage.sprite;
+                background.type = mainMenuImage.type;
+            }
+
+            background.color = mainMenuImage != null ? mainMenuImage.color : new Color(0.1f, 0.12f, 0.16f, 0.95f);
+            background.raycastTarget = true;
+            _settingsPanel.SetActive(false);
+
+            const float headerY = -36f;
+            var headerColor = new Color(1f, 0.82f, 0.15f);
+
+            var titleObject = new GameObject("SettingsTitle", typeof(RectTransform), typeof(TextMeshProUGUI));
+            titleObject.transform.SetParent(_settingsPanel.transform, false);
+            var titleRect = titleObject.GetComponent<RectTransform>();
+            titleRect.anchorMin = new Vector2(0f, 1f);
+            titleRect.anchorMax = new Vector2(0.5f, 1f);
+            titleRect.pivot = new Vector2(0f, 1f);
+            titleRect.anchoredPosition = new Vector2(40f, headerY);
+            titleRect.sizeDelta = new Vector2(360f, 48f);
+            var titleText = titleObject.GetComponent<TextMeshProUGUI>();
+            titleText.text = "CALAFIA SETTINGS";
+            titleText.alignment = TextAlignmentOptions.Left;
+            titleText.fontSize = 34f;
+            titleText.fontStyle = FontStyles.Bold;
+            titleText.color = headerColor;
+
+            var frameObject = new GameObject("SettingsFrame", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            frameObject.transform.SetParent(_settingsPanel.transform, false);
+            var frameRect = frameObject.GetComponent<RectTransform>();
+            frameRect.anchorMin = new Vector2(0.5f, 0.5f);
+            frameRect.anchorMax = new Vector2(0.5f, 0.5f);
+            frameRect.pivot = new Vector2(0.5f, 0.5f);
+            frameRect.anchoredPosition = new Vector2(0f, -10f);
+            frameRect.sizeDelta = new Vector2(540f, 220f);
+            var frameImage = frameObject.GetComponent<Image>();
+            ApplyPanelSprite(frameImage, _garageListPanelSprite);
+            frameImage.color = new Color(0.1f, 0.12f, 0.16f, 0.78f);
+            frameImage.raycastTarget = false;
+
+            var row = new GameObject("AutoBrakeRow", typeof(RectTransform), typeof(LayoutElement));
+            row.transform.SetParent(frameObject.transform, false);
+            var rowRect = row.GetComponent<RectTransform>();
+            rowRect.anchorMin = new Vector2(0f, 0.5f);
+            rowRect.anchorMax = new Vector2(1f, 0.5f);
+            rowRect.pivot = new Vector2(0.5f, 0.5f);
+            rowRect.offsetMin = new Vector2(22f, -26f);
+            rowRect.offsetMax = new Vector2(-22f, 26f);
+
+            var labelObject = new GameObject("AutoBrakeLabel", typeof(RectTransform), typeof(TextMeshProUGUI));
+            labelObject.transform.SetParent(row.transform, false);
+            var labelRect = labelObject.GetComponent<RectTransform>();
+            StretchHorizontal(labelRect, 0f, 170f);
+            var labelText = labelObject.GetComponent<TextMeshProUGUI>();
+            labelText.text = "AUTO BRAKE";
+            labelText.fontSize = 24f;
+            labelText.fontStyle = FontStyles.Bold;
+            labelText.color = Color.white;
+            labelText.alignment = TextAlignmentOptions.MidlineLeft;
+
+            var valueObject = new GameObject("AutoBrakeValue", typeof(RectTransform), typeof(TextMeshProUGUI));
+            valueObject.transform.SetParent(row.transform, false);
+            var valueRect = valueObject.GetComponent<RectTransform>();
+            valueRect.anchorMin = new Vector2(1f, 0.5f);
+            valueRect.anchorMax = new Vector2(1f, 0.5f);
+            valueRect.pivot = new Vector2(1f, 0.5f);
+            valueRect.anchoredPosition = new Vector2(-164f, 0f);
+            valueRect.sizeDelta = new Vector2(120f, 44f);
+            _settingsValueLabel = valueObject.GetComponent<TextMeshProUGUI>();
+            _settingsValueLabel.fontSize = 22f;
+            _settingsValueLabel.fontStyle = FontStyles.Bold;
+            _settingsValueLabel.color = headerColor;
+            _settingsValueLabel.alignment = TextAlignmentOptions.MidlineRight;
+
+            _autoBrakeToggleButton = InstantiatePrefabButton(_secondaryButtonPrefab, row.transform, "TOGGLE",
+                Vector2.zero, new Vector2(140f, 44f));
+            PinRight(_autoBrakeToggleButton.GetComponent<RectTransform>(), 0f, new Vector2(140f, 44f));
+
+            _settingsBackButton = InstantiatePrefabButton(_secondaryButtonPrefab, _settingsPanel.transform, "Back",
+                new Vector2(0f, 40f), new Vector2(220f, 50f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f));
+        }
+
         private Button CreateMenuButton(string label, Vector2 anchor, Vector2 anchoredPosition, Vector2 size, Transform parent)
         {
             var buttonObject = new GameObject(label + "Button", typeof(RectTransform), typeof(Image), typeof(Button));
@@ -233,6 +342,8 @@ namespace CalafiaRush
             if (_settingsButton != null) _settingsButton.onClick.AddListener(OnSettingsClicked);
             if (_quitButton != null) _quitButton.onClick.AddListener(OnQuitClicked);
             if (_garageBackButton != null) _garageBackButton.onClick.AddListener(HideGarage);
+            if (_settingsBackButton != null) _settingsBackButton.onClick.AddListener(HideSettings);
+            if (_autoBrakeToggleButton != null) _autoBrakeToggleButton.onClick.AddListener(ToggleAutoBrake);
         }
 
         private void EnsureGameOverPanel()
@@ -467,6 +578,7 @@ namespace CalafiaRush
         private void OnPlayClicked()
         {
             HideGarage();
+            HideSettings();
             _game.StartGame();
         }
 
@@ -483,6 +595,7 @@ namespace CalafiaRush
 
         private void ShowGarage()
         {
+            HideSettings();
             _garageVisible = true;
             if (_garagePanel != null) _garagePanel.SetActive(true);
             RefreshGarage();
@@ -494,9 +607,43 @@ namespace CalafiaRush
             if (_garagePanel != null) _garagePanel.SetActive(false);
         }
 
-        private static void OnSettingsClicked()
+        private void OnSettingsClicked()
         {
-            Debug.Log("CalafiaRush settings are not implemented yet.");
+            ToggleSettings();
+        }
+
+        private void ToggleSettings()
+        {
+            if (_settingsVisible) HideSettings();
+            else ShowSettings();
+        }
+
+        private void ShowSettings()
+        {
+            HideGarage();
+            _settingsVisible = true;
+            if (_settingsPanel != null) _settingsPanel.SetActive(true);
+            RefreshSettings();
+        }
+
+        private void HideSettings()
+        {
+            _settingsVisible = false;
+            if (_settingsPanel != null) _settingsPanel.SetActive(false);
+        }
+
+        private void ToggleAutoBrake()
+        {
+            if (_game == null) return;
+            _game.SetAutoBrakeEnabled(!_game.AutoBrakeEnabled);
+            RefreshSettings();
+        }
+
+        private void RefreshSettings()
+        {
+            if (_game == null || _settingsValueLabel == null || _autoBrakeToggleButton == null) return;
+            _settingsValueLabel.text = _game.AutoBrakeEnabled ? "ON" : "OFF";
+            SetButtonLabel(_autoBrakeToggleButton, _game.AutoBrakeEnabled ? "DISABLE" : "ENABLE");
         }
 
         private static void OnQuitClicked()
@@ -529,6 +676,7 @@ namespace CalafiaRush
         private void ShowTitleScreen()
         {
             HideGarage();
+            HideSettings();
             if (_mainMenuPanel != null) _mainMenuPanel.SetActive(true);
             if (_gameUiPanel != null) _gameUiPanel.SetActive(false);
             if (_gameOverPanel != null) _gameOverPanel.SetActive(false);
@@ -538,6 +686,7 @@ namespace CalafiaRush
         private void ShowGameplayScreen()
         {
             HideGarage();
+            HideSettings();
             if (_mainMenuPanel != null) _mainMenuPanel.SetActive(false);
             if (_gameUiPanel != null) _gameUiPanel.SetActive(true);
             if (_gameOverPanel != null) _gameOverPanel.SetActive(false);
@@ -582,10 +731,10 @@ namespace CalafiaRush
         private void DrawControls()
         {
             var y = Screen.height - 78f;
-            if (GUI.RepeatButton(new Rect(18f, y, 95f, 58f), "LEFT", _buttonStyle))
-                _input.SetLeftHeld(true);
-            if (GUI.RepeatButton(new Rect(123f, y, 95f, 58f), "RIGHT", _buttonStyle))
-                _input.SetRightHeld(true);
+            if (GUI.Button(new Rect(18f, y, 95f, 58f), "LEFT", _buttonStyle))
+                _input.PulseLaneLeft();
+            if (GUI.Button(new Rect(123f, y, 95f, 58f), "RIGHT", _buttonStyle))
+                _input.PulseLaneRight();
             if (GUI.RepeatButton(new Rect(Screen.width - 218f, y, 95f, 58f), "GAS", _buttonStyle))
                 _input.SetAccelerateHeld(true);
             if (GUI.Button(new Rect(Screen.width - 113f, y, 95f, 58f), "PAY $10", _buttonStyle))

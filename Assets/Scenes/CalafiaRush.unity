@@ -380,6 +380,15 @@ MonoBehaviour:
   _brakeGripMultiplier: 0.38
   _brakeDampingMultiplier: 0.42
   _bodyTiltSlerpSpeed: 7
+  _autoBrakeEnabled: 1
+  _autoBrakeDetectionRange: 12
+  _autoBrakeStopGap: 0.9
+  _autoBrakeDecelRate: 18
+  _autoBrakeResumeRate: 4.5
+  _autoBrakeUrgencyExponent: 1.35
+  _autoBrakeSpringStiffness: 9
+  _autoBrakeSpringDamping: 5
+  _checkpointBarrierLiftSpeed: 110
 --- !u!114 &576282796
 MonoBehaviour:
   m_ObjectHideFlags: 0

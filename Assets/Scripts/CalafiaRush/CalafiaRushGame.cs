@@ -24,6 +24,11 @@ namespace CalafiaRush
             public int lane;
             public bool resolved;
             public float phase;
+            public Transform barrierPivot;
+            public bool checkpointCleared;
+            public float barrierAngle;
+            public float trafficSpeed;
+            public float trafficTargetSpeed;
         }
 
         private sealed class BusSkin
@@ -78,6 +83,38 @@ namespace CalafiaRush
         [Header("Bus Visuals")]
         [SerializeField] private float _bodyTiltSlerpSpeed = 7f;
 
+        [Header("Auto Brake")]
+        [SerializeField] private bool _autoBrakeEnabled = true;
+        [SerializeField] private float _autoBrakeDetectionRange = 12f;
+        [SerializeField] private float _autoBrakeStopGap = 1f;
+        [SerializeField] private float _autoBrakeDecelRate = 18f;
+        [SerializeField] private float _autoBrakeResumeRate = 8f;
+        [SerializeField] private float _autoBrakeUrgencyExponent = 1.35f;
+        [SerializeField] private float _autoBrakeSpringStiffness = 9f;
+        [SerializeField] private float _autoBrakeSpringDamping = 5f;
+        [SerializeField] private float _checkpointBarrierLiftSpeed = 110f;
+
+        [Header("Traffic")]
+        [SerializeField] private bool _movingCarsEnabled = true;
+        [SerializeField] private float _movingCarMinSpeed = 0.02f;
+        [SerializeField] private float _movingCarMaxSpeed = 0.22f;
+        [SerializeField] private float _movingCarAccelRate = 0.45f;
+        [SerializeField] private float _movingCarBrakeRate = 2.5f;
+        [SerializeField] private float _movingCarFollowGap = CalafiaRushWorldDraw.TrafficCarLength;
+
+        private const float BusFrontZOffset = 2.1f;
+        private const float TrafficRearZOffset = CalafiaRushWorldDraw.TrafficCarLength * 0.5f;
+        private const float LightCycleDuration = 9f;
+        private const float LightGreenDuration = 4f;
+        private const float LightYellowDuration = 2f;
+        private const float LightRedDuration = 3f;
+        private const int MinPatternsBetweenLights = 6;
+        private const int MaxPatternsBetweenLights = 10;
+        private const int MinPatternsBetweenCheckpoints = 10;
+        private const int MaxPatternsBetweenCheckpoints = 13;
+
+        private enum TrafficLightPhase { Green, Yellow, Red }
+
         private readonly List<RoadItem> _items = new List<RoadItem>();
         private readonly List<Transform> _roadSegments = new List<Transform>();
 
@@ -106,6 +143,11 @@ namespace CalafiaRush
         private float _blockedUntil;
         private string _message = string.Empty;
         private bool _scoreBanked;
+        private bool _autoBrakeActive;
+        private bool _autoBrakeWasActive;
+        private RoadItem _pendingCheckpoint;
+        private int _patternsUntilNextLight;
+        private int _patternsUntilNextCheckpoint;
 
         public event Action<CalafiaRushGameState> StateChanged;
 
@@ -122,6 +164,8 @@ namespace CalafiaRush
         public float DriftAmount => _driftAmount;
         public string Message => _message;
         public bool IsMessageVisible => Time.time < _messageUntil;
+        public bool AutoBrakeEnabled => _autoBrakeEnabled;
+        public bool AutoBrakeActive => _autoBrakeActive;
 
         private void Awake()
         {
@@ -137,6 +181,11 @@ namespace CalafiaRush
         public Color GetSkinBodyColor(int index) => BusSkins[index].bodyColor;
         public Color GetSkinStripeColor(int index) => BusSkins[index].stripeColor;
         public bool OwnsSkin(int index) => (_ownedSkins & (1 << index)) != 0;
+        public void SetAutoBrakeEnabled(bool enabled)
+        {
+            _autoBrakeEnabled = enabled;
+            SaveGarage();
+        }
 
         public void StartGame()
         {
@@ -159,6 +208,11 @@ namespace CalafiaRush
             _spawnDistance = 0f;
             _blockedUntil = 0f;
             _scoreBanked = false;
+            _autoBrakeActive = false;
+            _autoBrakeWasActive = false;
+            _pendingCheckpoint = null;
+            _patternsUntilNextLight = Random.Range(MinPatternsBetweenLights, MaxPatternsBetweenLights + 1);
+            _patternsUntilNextCheckpoint = Random.Range(MinPatternsBetweenCheckpoints, MaxPatternsBetweenCheckpoints + 1);
             SetState(CalafiaRushGameState.Running);
             ShowMessage("PICK UP PASSENGERS. COMPLETE THE ROUTE!");
         }
@@ -170,17 +224,17 @@ namespace CalafiaRush
 
         public void TryBribe()
         {
-            if (Time.time >= _blockedUntil) return;
+            if (_pendingCheckpoint == null || _pendingCheckpoint.checkpointCleared) return;
             if (_money >= 10)
             {
                 _money -= 10;
-                _blockedUntil = Time.time;
                 _score += 25;
+                ClearCheckpoint(_pendingCheckpoint);
                 ShowMessage("MORDIDA PAID. VAMONOS!");
             }
             else
             {
-                ShowMessage("NOT ENOUGH CASH. WAIT IT OUT!");
+                ShowMessage("NOT ENOUGH CASH. PAY $10!");
             }
         }
 
@@ -232,91 +286,44 @@ namespace CalafiaRush
 
             for (var i = 0; i < 7; i++)
             {
-                var segment = CreateCube("Road Segment", new Vector3(0f, 0f, i * 12f - 10f),
+                var segment = CalafiaRushWorldDraw.DrawRoadSegment(new Vector3(0f, 0f, i * 12f - 10f),
                     new Vector3(11f, 0.15f, 12f), new Color(0.17f, 0.19f, 0.22f));
                 _roadSegments.Add(segment.transform);
-                CreateRoadDetails(segment.transform, i);
+                DrawRoadDetails(segment.transform, i);
             }
 
-            _bus = CreateBus();
+            var skin = BusSkins[_selectedSkin];
+            var busVisual = CalafiaRushWorldDraw.DrawBus(skin.bodyColor, skin.stripeColor);
+            _bus = busVisual.root;
+            _busBody = busVisual.body;
+            _busBodyRenderer = busVisual.bodyRenderer;
+            _busStripeRenderer = busVisual.stripeRenderer;
             _bus.transform.position = new Vector3(0f, 0.7f, -3.5f);
-            ApplySelectedSkin();
         }
 
-        private void CreateRoadDetails(Transform segment, int index)
+        private static void DrawRoadDetails(Transform segment, int index)
         {
             for (var laneDivider = -1; laneDivider <= 1; laneDivider += 2)
             {
                 for (var stripe = 0; stripe < 3; stripe++)
                 {
-                    var marker = CreateCube("Lane Marker", new Vector3(laneDivider * 1.6f, 0.1f,
-                            segment.position.z - 4f + stripe * 4f), new Vector3(0.12f, 0.03f, 2f),
-                        new Color(1f, 0.91f, 0.45f));
-                    marker.transform.SetParent(segment, true);
+                    CalafiaRushWorldDraw.DrawLaneMarker(segment,
+                        new Vector3(laneDivider * 1.6f, 0.1f, segment.position.z - 4f + stripe * 4f),
+                        new Vector3(0.12f, 0.03f, 2f), new Color(1f, 0.91f, 0.45f));
                 }
             }
 
             foreach (var side in new[] { -1f, 1f })
             {
-                var sidewalk = CreateCube("Sidewalk", new Vector3(side * 6.5f, 0.12f, segment.position.z),
+                CalafiaRushWorldDraw.DrawSidewalk(segment,
+                    new Vector3(side * 6.5f, 0.12f, segment.position.z),
                     new Vector3(2f, 0.28f, 12f), new Color(0.66f, 0.57f, 0.49f));
-                sidewalk.transform.SetParent(segment, true);
 
                 var buildingColor = Color.HSVToRGB((index * 0.13f + (side > 0 ? 0.06f : 0f)) % 1f, 0.58f, 0.88f);
-                var building = CreateCube("Colorful Building",
+                CalafiaRushWorldDraw.DrawBuilding(segment,
                     new Vector3(side * 8.4f, 1.5f + index % 3, segment.position.z + (index % 2 == 0 ? 2f : -2f)),
                     new Vector3(2.1f, 3f + (index % 3) * 1.2f, 5f), buildingColor);
-                building.transform.SetParent(segment, true);
             }
-        }
-
-        private GameObject CreateBus()
-        {
-            var root = new GameObject("Calafia");
-            _busBody = new GameObject("Bus Visual").transform;
-            _busBody.SetParent(root.transform, false);
-
-            var body = CreateCube("Bus Body", Vector3.zero, new Vector3(2.2f, 1.2f, 4.2f), Color.white);
-            body.transform.SetParent(_busBody, false);
-            body.transform.localPosition = new Vector3(0f, 0.55f, 0f);
-            _busBodyRenderer = body.GetComponent<Renderer>();
-
-            var stripe = CreateCube("Color Stripe", Vector3.zero, new Vector3(2.28f, 0.28f, 4.25f), Color.white);
-            stripe.transform.SetParent(_busBody, false);
-            stripe.transform.localPosition = new Vector3(0f, 0.55f, 0f);
-            _busStripeRenderer = stripe.GetComponent<Renderer>();
-
-            var windshield = CreateCube("Windshield", Vector3.zero, new Vector3(1.75f, 0.55f, 0.08f),
-                new Color(0.08f, 0.19f, 0.25f));
-            windshield.transform.SetParent(_busBody, false);
-            windshield.transform.localPosition = new Vector3(0f, 0.85f, -2.13f);
-
-            for (var z = -1.25f; z <= 1.25f; z += 0.85f)
-            {
-                foreach (var side in new[] { -1f, 1f })
-                {
-                    var window = CreateCube("Window", Vector3.zero, new Vector3(0.06f, 0.48f, 0.62f),
-                        new Color(0.1f, 0.25f, 0.31f));
-                    window.transform.SetParent(_busBody, false);
-                    window.transform.localPosition = new Vector3(side * 1.12f, 0.85f, z);
-                }
-            }
-
-            foreach (var x in new[] { -0.82f, 0.82f })
-            {
-                foreach (var z in new[] { -1.35f, 1.35f })
-                {
-                    var wheel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                    wheel.name = "Wheel";
-                    wheel.transform.SetParent(_busBody, false);
-                    wheel.transform.localPosition = new Vector3(x, 0.1f, z);
-                    wheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-                    wheel.transform.localScale = new Vector3(0.45f, 0.18f, 0.45f);
-                    wheel.GetComponent<Renderer>().material.color = new Color(0.04f, 0.04f, 0.04f);
-                }
-            }
-
-            return root;
         }
 
         private void Update()
@@ -334,15 +341,30 @@ namespace CalafiaRush
 
             var accelerating = _input.Accelerate;
             var braking = _input.Brake;
-            var targetSpeed = accelerating ? _maxSpeed : _cruiseSpeed;
-            if (braking) targetSpeed = 0f;
-            if (Time.time < _blockedUntil) targetSpeed = 0f;
+            var desiredSpeed = accelerating ? _maxSpeed : _cruiseSpeed;
+            if (braking) desiredSpeed = 0f;
+            if (Time.time < _blockedUntil) desiredSpeed = 0f;
+
+            var targetSpeed = desiredSpeed;
+            _autoBrakeActive = false;
+            if (_autoBrakeEnabled && Time.time >= _blockedUntil &&
+                TryGetNearestAutoBrakeGap(out var obstacleGap))
+            {
+                targetSpeed = GetAutoBrakeTargetSpeed(desiredSpeed, obstacleGap, out _autoBrakeActive);
+            }
+
             var longitudinalResponse = braking ? _brakeResponse : accelerating ? _accelResponse : _cruiseResponse;
+            if (_autoBrakeActive && _speed > targetSpeed)
+                longitudinalResponse = _autoBrakeDecelRate;
+            else if (_autoBrakeWasActive && !_autoBrakeActive && _speed < targetSpeed)
+                longitudinalResponse = _autoBrakeResumeRate;
+
             _speed = Mathf.MoveTowards(_speed, targetSpeed, Time.deltaTime * longitudinalResponse);
+            _autoBrakeWasActive = _autoBrakeActive;
 
             if (_input.BribePressed) TryBribe();
 
-            UpdateBusHandling(braking);
+            UpdateBusHandling(braking || _autoBrakeActive);
 
             var movement = _speed * Time.deltaTime;
             _distance += movement;
@@ -437,23 +459,44 @@ namespace CalafiaRush
 
         private void SpawnPattern()
         {
+            _patternsUntilNextLight--;
+            _patternsUntilNextCheckpoint--;
+
+            if (_patternsUntilNextLight <= 0)
+            {
+                SpawnLight();
+                _patternsUntilNextLight = Random.Range(MinPatternsBetweenLights, MaxPatternsBetweenLights + 1);
+                if (_patternsUntilNextCheckpoint <= 0)
+                    _patternsUntilNextCheckpoint = 1;
+                return;
+            }
+
+            if (_patternsUntilNextCheckpoint <= 0)
+            {
+                SpawnCop();
+                _patternsUntilNextCheckpoint = Random.Range(MinPatternsBetweenCheckpoints,
+                    MaxPatternsBetweenCheckpoints + 1);
+                return;
+            }
+
             var roll = Random.value;
-            if (roll < 0.35f)
+            if (roll < 0.38f)
             {
                 SpawnPassengerGroup();
             }
-            else if (roll < 0.67f)
+            else if (roll < 0.74f)
             {
-                SpawnTraffic(PickTrafficLane());
-                if (Random.value < 0.45f) SpawnTraffic(PickTrafficLane());
-            }
-            else if (roll < 0.82f)
-            {
-                SpawnLight();
-            }
-            else if (roll < 0.92f)
-            {
-                SpawnCop();
+                const float trafficSpawnZ = 42f;
+                var firstLane = PickTrafficLane();
+                SpawnTraffic(firstLane, trafficSpawnZ);
+                if (Random.value < 0.45f)
+                {
+                    var secondLane = PickTrafficLane();
+                    var secondSpawnZ = secondLane == firstLane
+                        ? trafficSpawnZ + GetTrafficFollowGap()
+                        : trafficSpawnZ;
+                    SpawnTraffic(secondLane, secondSpawnZ);
+                }
             }
             else
             {
@@ -471,80 +514,48 @@ namespace CalafiaRush
 
         private void SpawnPassengerGroup()
         {
-            const float sidewalkOffset = 1.1f;
+            const float sidewalkOffset = 2.1f;
             const float queueSpacing = 0.9f;
             var groupSize = Random.Range(1, 5);
 
             for (var i = 0; i < groupSize; i++)
             {
-                var passenger = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-                passenger.name = groupSize > 1 ? "Waiting Passenger " + (i + 1) : "Waiting Passenger";
-                passenger.transform.position = new Vector3(
-                    LaneX[PassengerLaneIndex] + sidewalkOffset,
-                    0.85f,
-                    42f + i * queueSpacing);
-                passenger.transform.localScale = new Vector3(0.55f, 0.85f, 0.55f);
-                passenger.GetComponent<Renderer>().material.color = Color.HSVToRGB(Random.value, 0.7f, 0.95f);
+                var passenger = CalafiaRushWorldDraw.DrawPassenger(
+                    new Vector3(LaneX[PassengerLaneIndex] + sidewalkOffset, 0.85f, 42f + i * queueSpacing),
+                    new Vector3(0.55f, 0.85f, 0.55f),
+                    Color.HSVToRGB(Random.value, 0.7f, 0.95f));
+                if (groupSize > 1) passenger.name = "Waiting Passenger " + (i + 1);
                 AddItem(passenger, RoadItemType.Passenger, PassengerLaneIndex);
             }
         }
 
-        private void SpawnTraffic(int lane)
+        private void SpawnTraffic(int lane, float spawnZ = 42f)
         {
-            var car = CreateCube("Traffic", new Vector3(LaneX[lane], 0.55f, 42f),
-                new Vector3(1.8f, 1f, 3.4f), Color.HSVToRGB(Random.value, 0.65f, 0.9f));
-            var glass = CreateCube("Traffic Windshield", Vector3.zero, new Vector3(1.5f, 0.45f, 0.08f),
-                new Color(0.08f, 0.16f, 0.2f));
-            glass.transform.SetParent(car.transform, false);
-            glass.transform.localPosition = new Vector3(0f, 0.25f, -1.72f);
-            AddItem(car, RoadItemType.Traffic, lane);
+            var car = CalafiaRushWorldDraw.DrawCar(new Vector3(LaneX[lane], 0.55f, spawnZ),
+                Color.HSVToRGB(Random.value, 0.65f, 0.9f));
+            var item = AddItem(car, RoadItemType.Traffic, lane);
+            item.trafficTargetSpeed = GetRandomTrafficSpeed(lane);
+            item.trafficSpeed = item.trafficTargetSpeed;
         }
 
         private void SpawnLight()
         {
-            var root = new GameObject("Traffic Light");
-            root.transform.position = new Vector3(0f, 0f, 44f);
-            foreach (var side in new[] { -1f, 1f })
-            {
-                var pole = CreateCube("Pole", Vector3.zero, new Vector3(0.18f, 4f, 0.18f), new Color(0.2f, 0.2f, 0.2f));
-                pole.transform.SetParent(root.transform, false);
-                pole.transform.localPosition = new Vector3(side * 5.2f, 2f, 0f);
-                var arm = CreateCube("Arm", Vector3.zero, new Vector3(5f, 0.16f, 0.16f), new Color(0.2f, 0.2f, 0.2f));
-                arm.transform.SetParent(root.transform, false);
-                arm.transform.localPosition = new Vector3(side * 2.7f, 3.8f, 0f);
-            }
-
-            var signal = CreateCube("Signal", Vector3.zero, new Vector3(0.7f, 1.5f, 0.5f), new Color(0.06f, 0.06f, 0.06f));
-            signal.transform.SetParent(root.transform, false);
-            signal.transform.localPosition = new Vector3(0f, 3.35f, 0f);
-            AddItem(root, RoadItemType.Light, -1).phase = Random.Range(0f, 4f);
+            var root = CalafiaRushWorldDraw.DrawSemaphore(new Vector3(0f, 0f, 44f),
+                CalafiaRushWorldDraw.SemaphoreRedColor);
+            AddItem(root, RoadItemType.Light, -1).phase = Random.Range(0f, LightCycleDuration);
         }
 
         private void SpawnCop()
         {
-            var root = new GameObject("Police Checkpoint");
-            root.transform.position = new Vector3(0f, 0f, 46f);
-            var barrier = CreateCube("Checkpoint Barrier", Vector3.zero, new Vector3(9f, 0.3f, 0.35f),
-                new Color(0.95f, 0.86f, 0.24f));
-            barrier.transform.SetParent(root.transform, false);
-            barrier.transform.localPosition = new Vector3(0f, 0.5f, 0f);
-            var officer = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            officer.name = "Officer";
-            officer.transform.SetParent(root.transform, false);
-            officer.transform.localPosition = new Vector3(4.2f, 1f, 0f);
-            officer.transform.localScale = new Vector3(0.6f, 1f, 0.6f);
-            officer.GetComponent<Renderer>().material.color = new Color(0.1f, 0.18f, 0.42f);
-            AddItem(root, RoadItemType.Cop, -1);
+            var checkpoint = CalafiaRushWorldDraw.DrawCheckpoint(new Vector3(0f, 0f, 46f));
+            var item = AddItem(checkpoint.root, RoadItemType.Cop, -1);
+            item.barrierPivot = checkpoint.barrierPivot;
         }
 
         private void SpawnCoin(int lane)
         {
-            var coin = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            coin.name = "Fare Bonus";
-            coin.transform.position = new Vector3(LaneX[lane], 1f, 42f);
-            coin.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            coin.transform.localScale = new Vector3(0.65f, 0.12f, 0.65f);
-            coin.GetComponent<Renderer>().material.color = new Color(1f, 0.78f, 0.12f);
+            var coin = CalafiaRushWorldDraw.DrawCoin(new Vector3(LaneX[lane], 1f, 42f),
+                CalafiaRushWorldDraw.CoinColor);
             AddItem(coin, RoadItemType.Coin, lane);
         }
 
@@ -557,6 +568,8 @@ namespace CalafiaRush
 
         private void UpdateItems(float movement)
         {
+            UpdateTrafficMovement(movement);
+
             for (var i = _items.Count - 1; i >= 0; i--)
             {
                 var item = _items[i];
@@ -566,26 +579,31 @@ namespace CalafiaRush
                     continue;
                 }
 
-                item.gameObject.transform.position += Vector3.back * movement;
+                if (item.type != RoadItemType.Traffic)
+                    item.gameObject.transform.position += Vector3.back * movement;
+
                 var z = item.gameObject.transform.position.z;
                 if (item.type == RoadItemType.Coin)
                     item.gameObject.transform.Rotate(0f, Time.deltaTime * 180f, 0f, Space.World);
 
                 if (item.type == RoadItemType.Light)
                 {
-                    var red = IsLightRed(item);
-                    item.gameObject.transform.Find("Signal").GetComponent<Renderer>().material.color =
-                        red ? new Color(1f, 0.08f, 0.04f) : new Color(0.08f, 0.95f, 0.24f);
+                    UpdateTrafficLightVisual(item);
                     if (!item.resolved && z < -1f)
                     {
                         item.resolved = true;
-                        if (red && _speed > 5f)
+                        var phase = GetTrafficLightPhase(item);
+                        if (phase == TrafficLightPhase.Red && _speed > 5f)
                         {
                             _timeLeft = Mathf.Max(0f, _timeLeft - 6f);
                             _speed = 3f;
                             ShowMessage("RED LIGHT!  -6 SECONDS");
                         }
-                        else if (!red)
+                        else if (phase == TrafficLightPhase.Yellow && _speed > 8f)
+                        {
+                            ShowMessage("YELLOW LIGHT!  SLOW DOWN");
+                        }
+                        else if (phase == TrafficLightPhase.Green)
                         {
                             _timeLeft += 10f;
                             _score += 75;
@@ -593,13 +611,32 @@ namespace CalafiaRush
                         }
                     }
                 }
-                else if (item.type == RoadItemType.Cop && !item.resolved && z < 2f)
+                else if (item.type == RoadItemType.Cop)
                 {
-                    item.resolved = true;
-                    _blockedUntil = Time.time + 8f;
-                    ShowMessage("CHECKPOINT! PRESS B TO PAY $10");
+                    UpdateCheckpointBarrier(item);
+
+                    if (!item.checkpointCleared && z < 14f && z > -6f)
+                    {
+                        _pendingCheckpoint = item;
+                        if (!item.resolved && z < 10f)
+                        {
+                            item.resolved = true;
+                            ShowMessage("CHECKPOINT! PRESS B TO PAY $10");
+                        }
+                    }
+                    else if (_pendingCheckpoint == item && (item.checkpointCleared || z < -6f))
+                    {
+                        _pendingCheckpoint = null;
+                    }
+
+                    if (!item.checkpointCleared && item.barrierAngle > -45f &&
+                        Mathf.Abs(z + 3.5f) < 1.6f)
+                    {
+                        _speed = 0f;
+                        ShowMessage("CHECKPOINT BLOCKED! PAY $10");
+                    }
                 }
-                else if (!item.resolved && Mathf.Abs(z + 3.5f) < 1.8f && item.lane == CurrentBusLane())
+                else if (!item.resolved && item.lane == CurrentBusLane() && ShouldResolveLaneItem(item, z))
                 {
                     ResolveLaneItem(item);
                 }
@@ -612,9 +649,105 @@ namespace CalafiaRush
             }
         }
 
-        private bool IsLightRed(RoadItem item)
+        private float GetTrafficFollowGap()
         {
-            return (Time.time + item.phase) % 7f < 4.2f;
+            return Mathf.Max(_movingCarFollowGap, CalafiaRushWorldDraw.TrafficCarLength);
+        }
+
+        private void UpdateTrafficMovement(float worldMovement)
+        {
+            if (Time.deltaTime <= 0f) return;
+
+            if (!_movingCarsEnabled)
+            {
+                foreach (var item in _items)
+                {
+                    if (item.type != RoadItemType.Traffic || !item.gameObject) continue;
+                    item.gameObject.transform.position += Vector3.back * worldMovement;
+                    item.trafficSpeed = 0f;
+                }
+
+                return;
+            }
+
+            for (var lane = 0; lane < LaneX.Length; lane++)
+            {
+                var laneTraffic = new List<RoadItem>();
+                foreach (var item in _items)
+                {
+                    if (item.type != RoadItemType.Traffic || !item.gameObject || item.lane != lane) continue;
+                    laneTraffic.Add(item);
+                }
+
+                laneTraffic.Sort((left, right) =>
+                    left.gameObject.transform.position.z.CompareTo(right.gameObject.transform.position.z));
+
+                RoadItem follower = null;
+                foreach (var item in laneTraffic)
+                {
+                    var currentPosition = item.gameObject.transform.position;
+                    var targetTrafficSpeed = Mathf.Min(item.trafficTargetSpeed, _movingCarMaxSpeed);
+                    var trafficResponse = item.trafficSpeed > targetTrafficSpeed ? _movingCarBrakeRate : _movingCarAccelRate;
+                    item.trafficSpeed = Mathf.MoveTowards(item.trafficSpeed, targetTrafficSpeed,
+                        trafficResponse * Time.deltaTime);
+
+                    var relativeMovement = worldMovement - item.trafficSpeed * Time.deltaTime;
+                    var proposedZ = currentPosition.z - relativeMovement;
+
+                    if (follower != null && follower.gameObject)
+                    {
+                        var followerLimitZ = follower.gameObject.transform.position.z + GetTrafficFollowGap();
+                        if (proposedZ < followerLimitZ) proposedZ = followerLimitZ;
+                    }
+
+                    if (!Mathf.Approximately(proposedZ, currentPosition.z))
+                    {
+                        var actualRelativeMovement = currentPosition.z - proposedZ;
+                        item.trafficSpeed = Mathf.Clamp(worldMovement / Time.deltaTime - actualRelativeMovement / Time.deltaTime,
+                            0f, _movingCarMaxSpeed);
+                    }
+
+                    currentPosition.z = proposedZ;
+                    item.gameObject.transform.position = currentPosition;
+                    follower = item;
+                }
+            }
+        }
+
+        private TrafficLightPhase GetTrafficLightPhase(RoadItem item)
+        {
+            var cycleTime = (Time.time + item.phase) % LightCycleDuration;
+            if (cycleTime < LightGreenDuration) return TrafficLightPhase.Green;
+            if (cycleTime < LightGreenDuration + LightYellowDuration) return TrafficLightPhase.Yellow;
+            return TrafficLightPhase.Red;
+        }
+
+        private void UpdateTrafficLightVisual(RoadItem item)
+        {
+            var signalColor = GetTrafficLightPhase(item) switch
+            {
+                TrafficLightPhase.Red => CalafiaRushWorldDraw.SemaphoreRedColor,
+                TrafficLightPhase.Yellow => CalafiaRushWorldDraw.SemaphoreYellowColor,
+                _ => CalafiaRushWorldDraw.SemaphoreGreenColor
+            };
+            CalafiaRushWorldDraw.SetSemaphoreSignalColor(item.gameObject, signalColor);
+        }
+
+        private void UpdateCheckpointBarrier(RoadItem item)
+        {
+            if (!item.barrierPivot) return;
+
+            // Arm extends left (-X) from cabin hinge; negative Z rotation swings it upward.
+            var targetAngle = item.checkpointCleared ? -82f : 0f;
+            item.barrierAngle = Mathf.MoveTowards(item.barrierAngle, targetAngle,
+                Time.deltaTime * _checkpointBarrierLiftSpeed);
+            item.barrierPivot.localRotation = Quaternion.Euler(0f, 0f, item.barrierAngle);
+        }
+
+        private void ClearCheckpoint(RoadItem item)
+        {
+            item.checkpointCleared = true;
+            if (_pendingCheckpoint == item) _pendingCheckpoint = null;
         }
 
         private void ResolveLaneItem(RoadItem item)
@@ -684,11 +817,133 @@ namespace CalafiaRush
             return nearestLane;
         }
 
+        private bool TryGetNearestAutoBrakeGap(out float gap)
+        {
+            var found = false;
+            gap = float.MaxValue;
+
+            if (TryGetNearestTrafficGapAhead(out var trafficGap))
+            {
+                gap = trafficGap;
+                found = true;
+            }
+
+            if (TryGetNearestCheckpointGapAhead(out var checkpointGap) &&
+                (!found || checkpointGap < gap))
+            {
+                gap = checkpointGap;
+                found = true;
+            }
+
+            return found;
+        }
+
+        private bool TryGetNearestTrafficGapAhead(out float gap)
+        {
+            gap = float.MaxValue;
+            var found = false;
+            var busZ = _bus.transform.position.z;
+            var busFrontZ = busZ + BusFrontZOffset;
+            var busLane = CurrentBusLane();
+
+            foreach (var item in _items)
+            {
+                if (item.type != RoadItemType.Traffic || !item.gameObject) continue;
+                if (item.lane != busLane) continue;
+
+                var trafficZ = item.gameObject.transform.position.z;
+                var trafficRearZ = trafficZ - TrafficRearZOffset;
+                if (trafficRearZ <= busFrontZ) continue;
+
+                var itemGap = trafficRearZ - busFrontZ;
+                if (itemGap >= gap) continue;
+                gap = itemGap;
+                found = true;
+            }
+
+            return found;
+        }
+
+        private float GetRandomTrafficSpeed(int lane)
+        {
+            var maxSpeed = _movingCarMaxSpeed;
+            var minSpeed = Mathf.Min(_movingCarMinSpeed, maxSpeed);
+            if (maxSpeed <= minSpeed) return minSpeed;
+
+            var laneSpeedScale = GetTrafficLaneSpeedScale(lane);
+            var laneMinSpeed = minSpeed * laneSpeedScale;
+            var laneMaxSpeed = maxSpeed * laneSpeedScale;
+            return Random.Range(laneMinSpeed, Mathf.Max(laneMinSpeed, laneMaxSpeed));
+        }
+
+        private static float GetTrafficLaneSpeedScale(int lane)
+        {
+            return lane switch
+            {
+                LeftLaneIndex => 1f,
+                CenterLaneIndex => 0.45f,
+                RightLaneIndex => 0.12f,
+                _ => 0.45f
+            };
+        }
+
+        private bool TryGetNearestCheckpointGapAhead(out float gap)
+        {
+            gap = float.MaxValue;
+            var found = false;
+            var busFrontZ = _bus.transform.position.z + BusFrontZOffset;
+
+            foreach (var item in _items)
+            {
+                if (item.type != RoadItemType.Cop || !item.gameObject || item.checkpointCleared) continue;
+                if (item.barrierAngle < -45f) continue;
+
+                var barrierZ = item.gameObject.transform.position.z;
+                if (barrierZ <= busFrontZ) continue;
+
+                var itemGap = barrierZ - busFrontZ - 0.35f;
+                if (itemGap >= gap) continue;
+                gap = itemGap;
+                found = true;
+            }
+
+            return found;
+        }
+
+        private float GetAutoBrakeTargetSpeed(float desiredSpeed, float gap, out bool active)
+        {
+            if (gap >= _autoBrakeDetectionRange)
+            {
+                active = false;
+                return desiredSpeed;
+            }
+
+            active = true;
+            if (gap <= _autoBrakeStopGap) return 0f;
+
+            var normalizedGap = Mathf.InverseLerp(_autoBrakeStopGap, _autoBrakeDetectionRange, gap);
+            normalizedGap = Mathf.Pow(normalizedGap, _autoBrakeUrgencyExponent);
+
+            var springTarget = desiredSpeed * normalizedGap;
+            var gapError = gap - _autoBrakeStopGap;
+            var springSpeed = Mathf.Max(0f, desiredSpeed + gapError * _autoBrakeSpringStiffness -
+                                            _speed * _autoBrakeSpringDamping);
+            return Mathf.Min(desiredSpeed, springTarget, springSpeed);
+        }
+
+        private bool ShouldResolveLaneItem(RoadItem item, float z)
+        {
+            if (Mathf.Abs(z + 3.5f) >= 1.8f) return false;
+            if (item.type == RoadItemType.Traffic && _autoBrakeEnabled) return false;
+            return true;
+        }
+
         private void LoadGarage()
         {
             _garagePoints = PlayerPrefs.GetInt("CalafiaRush.GaragePoints", 0);
             _ownedSkins = PlayerPrefs.GetInt("CalafiaRush.OwnedSkins", 1) | 1;
             _selectedSkin = Mathf.Clamp(PlayerPrefs.GetInt("CalafiaRush.SelectedSkin", 0), 0, BusSkins.Length - 1);
+            _autoBrakeEnabled = PlayerPrefs.GetInt("CalafiaRush.AutoBrakeEnabled", _autoBrakeEnabled ? 1 : 0) != 0;
             if (!OwnsSkin(_selectedSkin)) _selectedSkin = 0;
         }
 
@@ -697,6 +952,7 @@ namespace CalafiaRush
             PlayerPrefs.SetInt("CalafiaRush.GaragePoints", _garagePoints);
             PlayerPrefs.SetInt("CalafiaRush.OwnedSkins", _ownedSkins);
             PlayerPrefs.SetInt("CalafiaRush.SelectedSkin", _selectedSkin);
+            PlayerPrefs.SetInt("CalafiaRush.AutoBrakeEnabled", _autoBrakeEnabled ? 1 : 0);
             PlayerPrefs.Save();
         }
 
@@ -704,8 +960,9 @@ namespace CalafiaRush
         {
             if (_busBodyRenderer == null || _busStripeRenderer == null) return;
             var skin = BusSkins[_selectedSkin];
-            _busBodyRenderer.material.color = skin.bodyColor;
-            _busStripeRenderer.material.color = skin.stripeColor;
+            CalafiaRushWorldDraw.ApplyBusColors(
+                new CalafiaRushWorldDraw.BusVisualRefs(_bus, _busBody, _busBodyRenderer, _busStripeRenderer),
+                skin.bodyColor, skin.stripeColor);
         }
 
         private void ShowMessage(string message)
@@ -714,14 +971,5 @@ namespace CalafiaRush
             _messageUntil = Time.time + 2.4f;
         }
 
-        private static GameObject CreateCube(string name, Vector3 position, Vector3 scale, Color color)
-        {
-            var gameObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            gameObject.name = name;
-            gameObject.transform.position = position;
-            gameObject.transform.localScale = scale;
-            gameObject.GetComponent<Renderer>().material.color = color;
-            return gameObject;
-        }
     }
 }
