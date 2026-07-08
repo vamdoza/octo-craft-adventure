@@ -27,6 +27,8 @@ namespace CalafiaRush
             public Transform barrierPivot;
             public bool checkpointCleared;
             public float barrierAngle;
+            public float trafficSpeed;
+            public float trafficTargetSpeed;
         }
 
         private sealed class BusSkin
@@ -91,6 +93,14 @@ namespace CalafiaRush
         [SerializeField] private float _autoBrakeSpringStiffness = 9f;
         [SerializeField] private float _autoBrakeSpringDamping = 5f;
         [SerializeField] private float _checkpointBarrierLiftSpeed = 110f;
+
+        [Header("Traffic")]
+        [SerializeField] private bool _movingCarsEnabled = true;
+        [SerializeField] private float _movingCarMinSpeed = 0.02f;
+        [SerializeField] private float _movingCarMaxSpeed = 0.22f;
+        [SerializeField] private float _movingCarAccelRate = 0.45f;
+        [SerializeField] private float _movingCarBrakeRate = 2.5f;
+        [SerializeField] private float _movingCarFollowGap = 3.2f;
 
         private const float BusFrontZOffset = 2.1f;
         private const float TrafficRearZOffset = 1.7f;
@@ -490,7 +500,7 @@ namespace CalafiaRush
 
         private void SpawnPassengerGroup()
         {
-            const float sidewalkOffset = 1.1f;
+            const float sidewalkOffset = 2.1f;
             const float queueSpacing = 0.9f;
             var groupSize = Random.Range(1, 5);
 
@@ -509,7 +519,9 @@ namespace CalafiaRush
         {
             var car = CalafiaRushWorldDraw.DrawCar(new Vector3(LaneX[lane], 0.55f, 42f),
                 Color.HSVToRGB(Random.value, 0.65f, 0.9f));
-            AddItem(car, RoadItemType.Traffic, lane);
+            var item = AddItem(car, RoadItemType.Traffic, lane);
+            item.trafficTargetSpeed = GetRandomTrafficSpeed(lane);
+            item.trafficSpeed = item.trafficTargetSpeed;
         }
 
         private void SpawnLight()
@@ -542,6 +554,8 @@ namespace CalafiaRush
 
         private void UpdateItems(float movement)
         {
+            UpdateTrafficMovement(movement);
+
             for (var i = _items.Count - 1; i >= 0; i--)
             {
                 var item = _items[i];
@@ -551,7 +565,9 @@ namespace CalafiaRush
                     continue;
                 }
 
-                item.gameObject.transform.position += Vector3.back * movement;
+                if (item.type != RoadItemType.Traffic)
+                    item.gameObject.transform.position += Vector3.back * movement;
+
                 var z = item.gameObject.transform.position.z;
                 if (item.type == RoadItemType.Coin)
                     item.gameObject.transform.Rotate(0f, Time.deltaTime * 180f, 0f, Space.World);
@@ -615,6 +631,66 @@ namespace CalafiaRush
                 {
                     Destroy(item.gameObject);
                     _items.RemoveAt(i);
+                }
+            }
+        }
+
+        private void UpdateTrafficMovement(float worldMovement)
+        {
+            if (Time.deltaTime <= 0f) return;
+
+            if (!_movingCarsEnabled)
+            {
+                foreach (var item in _items)
+                {
+                    if (item.type != RoadItemType.Traffic || !item.gameObject) continue;
+                    item.gameObject.transform.position += Vector3.back * worldMovement;
+                    item.trafficSpeed = 0f;
+                }
+
+                return;
+            }
+
+            for (var lane = 0; lane < LaneX.Length; lane++)
+            {
+                var laneTraffic = new List<RoadItem>();
+                foreach (var item in _items)
+                {
+                    if (item.type != RoadItemType.Traffic || !item.gameObject || item.lane != lane) continue;
+                    laneTraffic.Add(item);
+                }
+
+                laneTraffic.Sort((left, right) =>
+                    left.gameObject.transform.position.z.CompareTo(right.gameObject.transform.position.z));
+
+                RoadItem follower = null;
+                foreach (var item in laneTraffic)
+                {
+                    var currentPosition = item.gameObject.transform.position;
+                    var targetTrafficSpeed = Mathf.Min(item.trafficTargetSpeed, _movingCarMaxSpeed);
+                    var trafficResponse = item.trafficSpeed > targetTrafficSpeed ? _movingCarBrakeRate : _movingCarAccelRate;
+                    item.trafficSpeed = Mathf.MoveTowards(item.trafficSpeed, targetTrafficSpeed,
+                        trafficResponse * Time.deltaTime);
+
+                    var relativeMovement = worldMovement - item.trafficSpeed * Time.deltaTime;
+                    var proposedZ = currentPosition.z - relativeMovement;
+
+                    if (follower != null && follower.gameObject)
+                    {
+                        var followerLimitZ = follower.gameObject.transform.position.z + _movingCarFollowGap;
+                        if (proposedZ < followerLimitZ) proposedZ = followerLimitZ;
+                    }
+
+                    if (!Mathf.Approximately(proposedZ, currentPosition.z))
+                    {
+                        var actualRelativeMovement = currentPosition.z - proposedZ;
+                        item.trafficSpeed = Mathf.Clamp(worldMovement / Time.deltaTime - actualRelativeMovement / Time.deltaTime,
+                            0f, _movingCarMaxSpeed);
+                    }
+
+                    currentPosition.z = proposedZ;
+                    item.gameObject.transform.position = currentPosition;
+                    follower = item;
                 }
             }
         }
@@ -767,6 +843,29 @@ namespace CalafiaRush
             }
 
             return found;
+        }
+
+        private float GetRandomTrafficSpeed(int lane)
+        {
+            var maxSpeed = _movingCarMaxSpeed;
+            var minSpeed = Mathf.Min(_movingCarMinSpeed, maxSpeed);
+            if (maxSpeed <= minSpeed) return minSpeed;
+
+            var laneSpeedScale = GetTrafficLaneSpeedScale(lane);
+            var laneMinSpeed = minSpeed * laneSpeedScale;
+            var laneMaxSpeed = maxSpeed * laneSpeedScale;
+            return Random.Range(laneMinSpeed, Mathf.Max(laneMinSpeed, laneMaxSpeed));
+        }
+
+        private static float GetTrafficLaneSpeedScale(int lane)
+        {
+            return lane switch
+            {
+                LeftLaneIndex => 1f,
+                CenterLaneIndex => 0.45f,
+                RightLaneIndex => 0.12f,
+                _ => 0.45f
+            };
         }
 
         private bool TryGetNearestCheckpointGapAhead(out float gap)
