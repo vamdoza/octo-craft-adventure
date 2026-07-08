@@ -181,6 +181,11 @@ namespace CalafiaRush
         public Color GetSkinBodyColor(int index) => BusSkins[index].bodyColor;
         public Color GetSkinStripeColor(int index) => BusSkins[index].stripeColor;
         public bool OwnsSkin(int index) => (_ownedSkins & (1 << index)) != 0;
+        public void SetAutoBrakeEnabled(bool enabled)
+        {
+            _autoBrakeEnabled = enabled;
+            SaveGarage();
+        }
 
         public void StartGame()
         {
@@ -924,6 +929,7 @@ namespace CalafiaRush
             _garagePoints = PlayerPrefs.GetInt("CalafiaRush.GaragePoints", 0);
             _ownedSkins = PlayerPrefs.GetInt("CalafiaRush.OwnedSkins", 1) | 1;
             _selectedSkin = Mathf.Clamp(PlayerPrefs.GetInt("CalafiaRush.SelectedSkin", 0), 0, BusSkins.Length - 1);
+            _autoBrakeEnabled = PlayerPrefs.GetInt("CalafiaRush.AutoBrakeEnabled", _autoBrakeEnabled ? 1 : 0) != 0;
             if (!OwnsSkin(_selectedSkin)) _selectedSkin = 0;
         }
 
@@ -932,6 +938,7 @@ namespace CalafiaRush
             PlayerPrefs.SetInt("CalafiaRush.GaragePoints", _garagePoints);
             PlayerPrefs.SetInt("CalafiaRush.OwnedSkins", _ownedSkins);
             PlayerPrefs.SetInt("CalafiaRush.SelectedSkin", _selectedSkin);
+            PlayerPrefs.SetInt("CalafiaRush.AutoBrakeEnabled", _autoBrakeEnabled ? 1 : 0);
             PlayerPrefs.Save();
         }
 
