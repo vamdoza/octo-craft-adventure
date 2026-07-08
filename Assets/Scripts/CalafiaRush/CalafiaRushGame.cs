@@ -493,10 +493,6 @@ namespace CalafiaRush
         {
             var car = CreateCube("Traffic", new Vector3(LaneX[lane], 0.55f, 42f),
                 new Vector3(1.8f, 1f, 3.4f), Color.HSVToRGB(Random.value, 0.65f, 0.9f));
-            var glass = CreateCube("Traffic Windshield", Vector3.zero, new Vector3(1.5f, 0.45f, 0.08f),
-                new Color(0.08f, 0.16f, 0.2f));
-            glass.transform.SetParent(car.transform, false);
-            glass.transform.localPosition = new Vector3(0f, 0.25f, -1.72f);
             AddItem(car, RoadItemType.Traffic, lane);
         }
 
