@@ -582,10 +582,10 @@ namespace CalafiaRush
         private void DrawControls()
         {
             var y = Screen.height - 78f;
-            if (GUI.RepeatButton(new Rect(18f, y, 95f, 58f), "LEFT", _buttonStyle))
-                _input.SetLeftHeld(true);
-            if (GUI.RepeatButton(new Rect(123f, y, 95f, 58f), "RIGHT", _buttonStyle))
-                _input.SetRightHeld(true);
+            if (GUI.Button(new Rect(18f, y, 95f, 58f), "LEFT", _buttonStyle))
+                _input.PulseLaneLeft();
+            if (GUI.Button(new Rect(123f, y, 95f, 58f), "RIGHT", _buttonStyle))
+                _input.PulseLaneRight();
             if (GUI.RepeatButton(new Rect(Screen.width - 218f, y, 95f, 58f), "GAS", _buttonStyle))
                 _input.SetAccelerateHeld(true);
             if (GUI.Button(new Rect(Screen.width - 113f, y, 95f, 58f), "PAY $10", _buttonStyle))
